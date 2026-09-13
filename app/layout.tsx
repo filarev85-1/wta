@@ -1,10 +1,14 @@
-// app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "WTA - 완이를 위한 여행 도우미",
-  description: "경완님과 가족을 위한 맞춤형 모바일 여행 가이드 앱",
+  title: "WTA - Wife Travel Assistant",
+  description: "경완님과 완이를 위한 전용 여행 비서 앱",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -14,6 +18,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
+      <head>
+        <link rel="apple-touch-icon" href="/icon.png" />
+        <meta name="theme-color" content="#2563eb" />
+      </head>
       <body>{children}</body>
     </html>
   );

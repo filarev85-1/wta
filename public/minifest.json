@@ -1,0 +1,21 @@
+{
+  "name": "WTA - Wife Travel Assistant",
+  "short_name": "WTA",
+  "description": "경완님과 완이를 위한 전용 여행 비서",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
