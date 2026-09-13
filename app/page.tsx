@@ -64,7 +64,7 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
-const APP_VERSION = 'Ver 1.3';
+const APP_VERSION = 'Ver 1.4';
 
 export default function WTAApp() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
