@@ -1,111 +1,151 @@
-import { google } from 'googleapis';
+// app/api/sheets/route.ts
 import { NextResponse } from 'next/server';
+import { google } from 'googleapis';
 
-const auth = new google.auth.GoogleAuth({
-  credentials: {
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  },
-  scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
+function getGoogleSheetsClient() {
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  let privateKey = process.env.GOOGLE_PRIVATE_KEY;
 
-const sheets = google.sheets({ version: 'v4', auth });
-const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
+  if (!email || !privateKey) {
+    throw new Error('Google Service Account environment variables are missing');
+  }
+
+  privateKey = privateKey.replace(/\\n/g, '\n');
+  if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+    privateKey = privateKey.substring(1, privateKey.length - 1);
+  }
+
+  const auth = new google.auth.JWT({
+    email,
+    key: privateKey,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+
+  return google.sheets({ version: 'v4', auth });
+}
 
 export async function GET(req: Request) {
   try {
+    const sheets = getGoogleSheetsClient();
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
     const { searchParams } = new URL(req.url);
-    const type = searchParams.get('type'); // 'checklists' 또는 'trips'
+    const type = searchParams.get('type');
 
     if (type === 'trips') {
       const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: 'Trips!A2:E',
+        spreadsheetId,
+        range: 'Trips!A2:G100',
       });
+
       const rows = response.data.values || [];
-      const trips = rows.map((row, idx) => ({
-        id: row[0] || `trip-${idx}`,
-        title: row[1] || '',
-        startDate: row[2] || '',
-        endDate: row[3] || '',
-        type: row[4] || '🏕️ 캠핑',
-        places: row[5] ? JSON.parse(row[5]) : [],
-      }));
+      const trips = rows.map((row) => {
+        let parsedPlaces = [];
+        if (row[5]) {
+          try {
+            parsedPlaces = typeof row[5] === 'string' ? JSON.parse(row[5]) : row[5];
+          } catch (e) {
+            console.error('places JSON parse error:', e);
+            parsedPlaces = [];
+          }
+        }
+        return {
+          id: row[0] || '',
+          title: row[1] || '',
+          startDate: row[2] || '',
+          endDate: row[3] || '',
+          type: row[4] || '🏕️ 캠핑',
+          places: Array.isArray(parsedPlaces) ? parsedPlaces : [],
+          review: row[6] || '',
+        };
+      });
+
       return NextResponse.json({ trips });
+    } else {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'Checklist!A2:F100',
+      });
+
+      const rows = response.data.values || [];
+      const checklists = rows.map((row) => ({
+        id: Number(row[0]),
+        tripId: row[1] || undefined,
+        category: row[2] || '음식/식재료',
+        title: row[3] || '',
+        completed: row[4] === 'TRUE' || row[4] === 'true',
+        imageUrl: row[5] || undefined,
+      }));
+
+      return NextResponse.json({ checklists });
     }
-
-    // 기본 체크리스트 GET
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'Checklist!A2:C',
-    });
-    const rows = response.data.values || [];
-    const checklists = rows.map((row, index) => ({
-      id: index + 1,
-      category: row[0] || '기타',
-      title: row[1] || '',
-      completed: row[2] === 'TRUE',
-    }));
-
-    return NextResponse.json({ checklists });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (err: any) {
+    console.error('Sheets GET error:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const { type, checklists, trips } = await req.json();
+    const sheets = getGoogleSheetsClient();
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+    const body = await req.json();
 
-    if (type === 'trips') {
-      const values = trips.map((t: any) => [
+    if (body.type === 'trips') {
+      const trips = body.trips || [];
+      const rows = trips.map((t: any) => [
         t.id,
         t.title,
         t.startDate,
         t.endDate,
         t.type,
         JSON.stringify(t.places || []),
+        t.review || '',
       ]);
 
       await sheets.spreadsheets.values.clear({
-        spreadsheetId: SPREADSHEET_ID,
-        range: 'Trips!A2:F100',
+        spreadsheetId,
+        range: 'Trips!A2:G100',
       });
 
-      if (values.length > 0) {
+      if (rows.length > 0) {
         await sheets.spreadsheets.values.update({
-          spreadsheetId: SPREADSHEET_ID,
+          spreadsheetId,
           range: 'Trips!A2',
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values },
+          requestBody: { values: rows },
         });
       }
-      return NextResponse.json({ success: true });
-    }
 
-    // 체크리스트 POST
-    const values = checklists.map((item: any) => [
-      item.category,
-      item.title,
-      item.completed ? 'TRUE' : 'FALSE',
-    ]);
+      return NextResponse.json({ success: true, count: rows.length });
+    } else {
+      const checklists = body.checklists || [];
+      const rows = checklists.map((c: any) => [
+        c.id,
+        c.tripId || '',
+        c.category || '기타',
+        c.title,
+        c.completed ? 'TRUE' : 'FALSE',
+        c.imageUrl || '',
+      ]);
 
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'Checklist!A2:C100',
-    });
-
-    if (values.length > 0) {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: 'Checklist!A2',
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values },
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId,
+        range: 'Checklist!A2:F100',
       });
-    }
 
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+      if (rows.length > 0) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: 'Checklist!A2',
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: rows },
+        });
+      }
+
+      return NextResponse.json({ success: true, count: rows.length });
+    }
+  } catch (err: any) {
+    console.error('Sheets POST error:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
