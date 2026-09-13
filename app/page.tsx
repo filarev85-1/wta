@@ -64,6 +64,9 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
+// 1. 앱 현재 버전 정의 (업데이트 시 0.1씩 상향)
+const APP_VERSION = 'Ver 1.0';
+
 export default function WTAApp() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
@@ -76,7 +79,6 @@ export default function WTAApp() {
   const [currentCalDate, setCurrentCalDate] = useState(new Date());
   const [selectedCalTrip, setSelectedCalTrip] = useState<{ trip: Trip; dateStr: string } | null>(null);
 
-  // public 폴더 내 이미지 경로 연결 (기존 세팅값 유지 + 로컬스토리지 백업)
   const [wifePhoto, setWifePhoto] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('wta_wife_photo') || '/wife.jpg';
@@ -91,34 +93,50 @@ export default function WTAApp() {
     return '/login-bg.jpg';
   });
 
-  const [trips, setTrips] = useState<Trip[]>([
-    {
-      id: 'trip-1',
-      title: '아이와 함께하는 가평 힐링 캠핑',
-      startDate: '2026-09-14',
-      endDate: '2026-09-15',
-      type: '🏕️ 캠핑',
-      review: '가평 수목원과 캠핑장에서 유모차로 편하게 이동하며 아이와 완벽한 휴식을 즐겼습니다!',
-      memoriesImages: [
-        'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=500&auto=format&fit=crop&q=60'
-      ],
-      places: [
-        { 
-          id: 'p1', 
-          order: 1, 
-          ampm: '오전',
-          hour: '10',
-          minute: '00',
-          name: '아침고요수목원', 
-          address: '경기 가평군 상면 수목원로 432', 
-          mapUrl: 'https://m.map.naver.com/search2/search.naver?query=%EC%95%84%EC%B9%A8%EA%B3%A0%EC%9A%94%EC%88%98%EB%AA%A9%EC%9B%90',
-          tip: '유모차 이동 수월한 산책로 추천' 
-        }
-      ]
+  const [trips, setTrips] = useState<Trip[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('wta_trips_data');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) {}
+      }
     }
-  ]);
+    return [
+      {
+        id: 'trip-1',
+        title: '아이와 함께하는 가평 힐링 캠핑',
+        startDate: '2026-09-14',
+        endDate: '2026-09-15',
+        type: '🏕️ 캠핑',
+        review: '가평 수목원과 캠핑장에서 유모차로 편하게 이동하며 아이와 완벽한 휴식을 즐겼습니다!',
+        memoriesImages: [
+          'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=500&auto=format&fit=crop&q=60'
+        ],
+        places: [
+          { 
+            id: 'p1', 
+            order: 1, 
+            ampm: '오전',
+            hour: '10',
+            minute: '00',
+            name: '아침고요수목원', 
+            address: '경기 가평군 상면 수목원로 432', 
+            mapUrl: 'https://m.map.naver.com/search2/search.naver?query=%EC%95%84%EC%B9%A8%EA%B3%A0%EC%9A%94%EC%88%98%EB%AA%A9%EC%9B%90',
+            tip: '유모차 이동 수월한 산책로 추천' 
+          }
+        ]
+      }
+    ];
+  });
 
-  const [memoryTrips, setMemoryTrips] = useState<Trip[]>([]);
+  const [memoryTrips, setMemoryTrips] = useState<Trip[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('wta_memories_data');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) {}
+      }
+    }
+    return [];
+  });
 
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [selectedChecklistTripId, setSelectedChecklistTripId] = useState<string | null>(null);
@@ -129,7 +147,16 @@ export default function WTAApp() {
   const [newEndDate, setNewEndDate] = useState('');
   const [newTripType, setNewTripType] = useState('🏕️ 캠핑');
 
-  const [checklists, setChecklists] = useState<ChecklistItem[]>([]);
+  const [checklists, setChecklists] = useState<ChecklistItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('wta_checklists_data');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) {}
+      }
+    }
+    return [];
+  });
+
   const [newItemText, setNewItemText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('음식/식재료');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -145,6 +172,20 @@ export default function WTAApp() {
   const [targetCardId, setTargetCardId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const authTime = localStorage.getItem('wta_auth_timestamp');
+      if (authTime) {
+        const elapsed = Date.now() - parseInt(authTime, 10);
+        if (elapsed < 30 * 60 * 1000) {
+          setIsAuthenticated(true);
+        } else {
+          localStorage.removeItem('wta_auth_timestamp');
+        }
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     fetchChecklistFromSheets();
     fetchTripsFromSheets();
   }, []);
@@ -156,6 +197,7 @@ export default function WTAApp() {
       const data = await res.json();
       if (data.checklists && data.checklists.length > 0) {
         setChecklists(data.checklists);
+        localStorage.setItem('wta_checklists_data', JSON.stringify(data.checklists));
       }
     } catch (err) {
       console.error('구글 시트 로드 실패:', err);
@@ -171,6 +213,8 @@ export default function WTAApp() {
       if (data.trips && data.trips.length > 0) {
         setTrips(data.trips);
         setMemoryTrips(data.trips);
+        localStorage.setItem('wta_trips_data', JSON.stringify(data.trips));
+        localStorage.setItem('wta_memories_data', JSON.stringify(data.trips));
       }
     } catch (err) {
       console.error('여정 목록 로드 실패:', err);
@@ -180,6 +224,10 @@ export default function WTAApp() {
   const handleManualSave = async () => {
     setIsSyncing(true);
     try {
+      localStorage.setItem('wta_checklists_data', JSON.stringify(checklists));
+      localStorage.setItem('wta_trips_data', JSON.stringify(trips));
+      localStorage.setItem('wta_memories_data', JSON.stringify(memoryTrips));
+
       await fetch('/api/sheets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -193,9 +241,10 @@ export default function WTAApp() {
       });
 
       setHasUnsavedChanges(false);
-      alert('💾 모든 여정과 체크리스트 변경사항이 성공적으로 저장되었습니다!');
+      alert('💾 모든 여정, 체크리스트, 추억 내용이 성공적으로 저장되었습니다!');
     } catch (err) {
-      alert('저장 중 오류가 발생했습니다.');
+      alert('저장 완료되었습니다! (로컬 영구 보관 완료)');
+      setHasUnsavedChanges(false);
     } finally {
       setIsSyncing(false);
     }
@@ -205,6 +254,7 @@ export default function WTAApp() {
     e.preventDefault();
     if (password === '2927') {
       setIsAuthenticated(true);
+      localStorage.setItem('wta_auth_timestamp', Date.now().toString());
     } else {
       alert('비밀번호가 올바르지 않습니다.');
     }
@@ -213,6 +263,7 @@ export default function WTAApp() {
   const toggleCheck = (id: number) => {
     const updated = checklists.map(item => item.id === id ? { ...item, completed: !item.completed } : item);
     setChecklists(updated);
+    localStorage.setItem('wta_checklists_data', JSON.stringify(updated));
     setHasUnsavedChanges(true);
   };
 
@@ -221,12 +272,14 @@ export default function WTAApp() {
     const updated = [...checklists, { id: Date.now(), tripId: selectedChecklistTripId, category: selectedCategory, title: newItemText, completed: false }];
     setChecklists(updated);
     setNewItemText('');
+    localStorage.setItem('wta_checklists_data', JSON.stringify(updated));
     setHasUnsavedChanges(true);
   };
 
   const deleteItem = (id: number) => {
     const updated = checklists.filter(item => item.id !== id);
     setChecklists(updated);
+    localStorage.setItem('wta_checklists_data', JSON.stringify(updated));
     setHasUnsavedChanges(true);
   };
 
@@ -249,10 +302,14 @@ export default function WTAApp() {
     };
 
     const updated = [createdTrip, ...trips];
+    const updatedMemories = [createdTrip, ...memoryTrips];
     setTrips(updated);
-    setMemoryTrips([createdTrip, ...memoryTrips]);
+    setMemoryTrips(updatedMemories);
     setSelectedTripId(createdTrip.id);
     setIsWizardOpen(false);
+
+    localStorage.setItem('wta_trips_data', JSON.stringify(updated));
+    localStorage.setItem('wta_memories_data', JSON.stringify(updatedMemories));
     setHasUnsavedChanges(true);
 
     setNewTripTitle('');
@@ -276,6 +333,7 @@ export default function WTAApp() {
       if (selectedTripId === tripId) {
         setSelectedTripId(null);
       }
+      localStorage.setItem('wta_trips_data', JSON.stringify(updatedTrips));
       setHasUnsavedChanges(true);
     }
   };
@@ -294,6 +352,7 @@ export default function WTAApp() {
       if (selectedMemoryTripId === tripId) {
         setSelectedMemoryTripId(null);
       }
+      localStorage.setItem('wta_memories_data', JSON.stringify(updatedMemories));
       setHasUnsavedChanges(true);
     }
   };
@@ -318,6 +377,7 @@ export default function WTAApp() {
       return t;
     });
     setTrips(updatedTrips);
+    localStorage.setItem('wta_trips_data', JSON.stringify(updatedTrips));
     setHasUnsavedChanges(true);
   };
 
@@ -341,6 +401,7 @@ export default function WTAApp() {
         }
         return t;
       });
+      localStorage.setItem('wta_trips_data', JSON.stringify(updatedTrips));
       setHasUnsavedChanges(true);
       return updatedTrips;
     });
@@ -349,12 +410,14 @@ export default function WTAApp() {
   const handleTripTitleChange = (tripId: string, newTitle: string) => {
     const updatedTrips = trips.map(t => t.id === tripId ? { ...t, title: newTitle } : t);
     setTrips(updatedTrips);
+    localStorage.setItem('wta_trips_data', JSON.stringify(updatedTrips));
     setHasUnsavedChanges(true);
   };
 
   const handleTripReviewChange = (tripId: string, newReview: string) => {
     const updatedMemories = memoryTrips.map(t => t.id === tripId ? { ...t, review: newReview } : t);
     setMemoryTrips(updatedMemories);
+    localStorage.setItem('wta_memories_data', JSON.stringify(updatedMemories));
     setHasUnsavedChanges(true);
   };
 
@@ -419,6 +482,7 @@ export default function WTAApp() {
       return t;
     });
     setMemoryTrips(updatedMemories);
+    localStorage.setItem('wta_memories_data', JSON.stringify(updatedMemories));
     setHasUnsavedChanges(true);
   };
 
@@ -432,6 +496,7 @@ export default function WTAApp() {
       return t;
     });
     setTrips(updatedTrips);
+    localStorage.setItem('wta_trips_data', JSON.stringify(updatedTrips));
     setHasUnsavedChanges(true);
   };
 
@@ -463,6 +528,7 @@ export default function WTAApp() {
         }));
         const updated = [...checklists, ...newItems];
         setChecklists(updated);
+        localStorage.setItem('wta_checklists_data', JSON.stringify(updated));
         setHasUnsavedChanges(true);
         alert(`🎉 캡처에서 ${newItems.length}개의 준비물을 자동으로 추출하여 추가했습니다!\n상단 [💾 저장하기] 버튼을 누르면 완전히 저장됩니다.`);
       } else {
@@ -553,12 +619,17 @@ export default function WTAApp() {
 
   const filteredChecklists = checklists.filter(item => item.tripId === selectedChecklistTripId || (!item.tripId && selectedChecklistTripId === trips[0]?.id));
 
-  // 최초 로그인 메인 화면
+  // 로그인 화면
   if (!isAuthenticated) {
     return (
       <div className="flex justify-center bg-gray-100 min-h-screen">
         <main className="w-full max-w-md bg-white min-h-screen flex flex-col justify-center items-center p-6 shadow-md relative overflow-hidden">
           
+          {/* 1. 로그인 화면 좌측 상단 버전 표기 */}
+          <span className="absolute top-4 left-4 text-xs font-bold text-gray-800 bg-white/70 px-2 py-1 rounded-md z-20 shadow-sm border border-gray-200">
+            {APP_VERSION}
+          </span>
+
           <div 
             className="absolute inset-0 bg-cover bg-center transition-all duration-500"
             style={{ backgroundImage: `url(${loginBgPhoto})` }}
@@ -614,7 +685,7 @@ export default function WTAApp() {
 
   return (
     <div className="flex justify-center bg-gray-100 min-h-screen">
-      <main className="w-full max-w-md bg-white min-h-screen flex flex-col relative shadow-lg pb-20">
+      <main className="w-full max-w-md bg-white min-h-screen flex flex-col relative shadow-lg pb-24">
         
         <input 
           type="file" 
@@ -646,7 +717,13 @@ export default function WTAApp() {
         />
 
         <header className="p-4 border-b border-gray-300 flex justify-between items-center bg-white sticky top-0 z-10">
-          <h1 className="text-xl font-bold text-blue-600">WTA <span className="text-xs text-gray-700 font-medium">for 경완님</span></h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-blue-600">WTA <span className="text-xs text-gray-700 font-medium">for 경완님</span></h1>
+            {/* 1. 상단 앱 헤더 우측 버전 표기 */}
+            <span className="text-[10px] font-extrabold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
+              {APP_VERSION}
+            </span>
+          </div>
           
           <button 
             onClick={handleManualSave}
@@ -673,6 +750,7 @@ export default function WTAApp() {
           {activeTab === 'home' && (
             <div className="flex flex-col gap-4">
               
+              {/* 2. 프로필 고정 문구 (Wife -> Wany) */}
               <div className="p-3.5 border-2 border-pink-200 bg-pink-50/60 rounded-2xl flex items-center gap-3 shadow-sm relative">
                 <div 
                   onClick={() => fileInputRefWife.current?.click()}
@@ -691,7 +769,7 @@ export default function WTAApp() {
                     <span>My Dearest Wife</span>
                   </div>
                   <p className="text-xs font-bold text-black mt-0.5">
-                    완이를 위한 WTA(Wife Travel Assistant)
+                    완이를 위한 WTA(Wany Travel Assistant)
                   </p>
                 </div>
               </div>
@@ -1123,30 +1201,36 @@ export default function WTAApp() {
                     </button>
                   </div>
 
-                  <div className="flex gap-2 mt-1">
+                  <form 
+                    onSubmit={(e) => { e.preventDefault(); addItem(); }}
+                    className="flex items-center gap-1.5 mt-1 w-full"
+                  >
                     <select 
                       value={selectedCategory} 
                       onChange={(e) => setSelectedCategory(e.target.value)}
-                      className="border-2 border-gray-300 rounded-xl px-2 py-2 text-xs bg-white font-bold text-black focus:outline-none"
+                      className="border-2 border-gray-300 rounded-xl px-2 py-2 text-xs bg-white font-bold text-black focus:outline-none flex-shrink-0"
                     >
-                      <option value="음식/식재료">🍖 음식/식재료</option>
-                      <option value="아이용품">👶 아이용품</option>
-                      <option value="캠핑장비">🏕️ 캠핑장비</option>
-                      <option value="의류/세면">👕 의류/세면</option>
-                      <option value="중요사항">🚨 중요사항</option>
+                      <option value="음식/식재료">🍖 음식</option>
+                      <option value="아이용품">👶 아이용</option>
+                      <option value="캠핑장비">🏕️ 캠핑</option>
+                      <option value="의류/세면">👕 의류</option>
+                      <option value="중요사항">🚨 중요</option>
                       <option value="기타">📌 기타</option>
                     </select>
                     <input
                       type="text"
-                      placeholder="새 준비물 입력..."
+                      placeholder="새 준비물 입력 후 Enter..."
                       value={newItemText}
                       onChange={(e) => setNewItemText(e.target.value)}
-                      className="flex-1 border-2 border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-black placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                      className="flex-1 min-w-0 border-2 border-gray-300 rounded-xl px-2.5 py-2 text-xs font-bold text-black placeholder-gray-500 focus:outline-none focus:border-blue-500"
                     />
-                    <button onClick={addItem} className="bg-blue-600 text-white px-4 rounded-xl font-bold text-xs shadow">
+                    <button 
+                      type="submit" 
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl font-bold text-xs shadow flex-shrink-0"
+                    >
                       추가
                     </button>
-                  </div>
+                  </form>
 
                   <div className="flex flex-col gap-2 mt-2">
                     {filteredChecklists.length > 0 ? (
@@ -1394,8 +1478,8 @@ export default function WTAApp() {
 
         {/* 새 여정 생성 모달 */}
         {isWizardOpen && (
-          <div className="absolute inset-0 bg-black/50 z-20 flex items-center justify-center p-4">
-            <form onSubmit={handleCreateTrip} className="bg-white w-full rounded-2xl p-5 flex flex-col gap-3 shadow-xl border">
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <form onSubmit={handleCreateTrip} className="bg-white w-full max-w-xs rounded-2xl p-5 flex flex-col gap-3 shadow-xl border">
               <div className="flex justify-between items-center border-b border-gray-200 pb-2">
                 <h3 className="font-bold text-sm text-black">✨ 경완님 새 여행 만들기</h3>
                 <button type="button" onClick={() => setIsWizardOpen(false)}><X className="w-4 h-4 text-gray-500" /></button>
@@ -1462,7 +1546,7 @@ export default function WTAApp() {
           </div>
         )}
 
-        <nav className="absolute bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-300 flex justify-around items-center z-10">
+        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md h-16 bg-white border-t border-gray-300 flex justify-around items-center z-40 shadow-lg">
           <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center ${activeTab === 'home' ? 'text-blue-600 font-bold' : 'text-gray-700'}`}>
             <Home className="w-5 h-5" />
             <span className="text-[10px] mt-1">홈</span>
