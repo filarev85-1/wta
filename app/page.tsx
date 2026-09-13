@@ -64,8 +64,7 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
-// 1. 앱 현재 버전 정의 (업데이트 시 0.1씩 상향)
-const APP_VERSION = 'Ver 1.0';
+const APP_VERSION = 'Ver 1.2';
 
 export default function WTAApp() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -469,21 +468,39 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  const handleAddMemoryImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ☁️ 추억 사진 무조건 구글 드라이브 100% 업로드
+  const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedMemoryTripId) return;
 
-    const imgUrl = URL.createObjectURL(file);
-    const updatedMemories = memoryTrips.map(t => {
-      if (t.id === selectedMemoryTripId) {
-        const imgs = t.memoriesImages || [];
-        return { ...t, memoriesImages: [...imgs, imgUrl] };
+    setIsAnalyzing(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload-drive', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (data.fileUrl) {
+        const updatedMemories = memoryTrips.map(t => {
+          if (t.id === selectedMemoryTripId) {
+            const imgs = t.memoriesImages || [];
+            return { ...t, memoriesImages: [...imgs, data.fileUrl] };
+          }
+          return t;
+        });
+        setMemoryTrips(updatedMemories);
+        localStorage.setItem('wta_memories_data', JSON.stringify(updatedMemories));
+        setHasUnsavedChanges(true);
+        alert('☁️ 추억 사진이 구글 드라이브에 안전하게 보관되었습니다!');
+      } else {
+        alert('구글 드라이브 사진 업로드에 실패했습니다.');
       }
-      return t;
-    });
-    setMemoryTrips(updatedMemories);
-    localStorage.setItem('wta_memories_data', JSON.stringify(updatedMemories));
-    setHasUnsavedChanges(true);
+    } catch (err) {
+      alert('구글 드라이브 업로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleDeletePlaceCard = (cardId: string) => {
@@ -504,8 +521,6 @@ export default function WTAApp() {
     const file = e.target.files?.[0];
     if (!file || !selectedChecklistTripId) return;
 
-    const localImgUrl = URL.createObjectURL(file);
-
     setIsAnalyzing(true);
     const formData = new FormData();
     formData.append('file', file);
@@ -515,7 +530,7 @@ export default function WTAApp() {
       const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
       const data = await res.json();
 
-      const driveImgUrl = data.fileUrl || localImgUrl;
+      const driveImgUrl = data.fileUrl;
 
       if (data.extractedData && data.extractedData.length > 0) {
         const newItems: ChecklistItem[] = data.extractedData.map((item: any, idx: number) => ({
@@ -530,7 +545,7 @@ export default function WTAApp() {
         setChecklists(updated);
         localStorage.setItem('wta_checklists_data', JSON.stringify(updated));
         setHasUnsavedChanges(true);
-        alert(`🎉 캡처에서 ${newItems.length}개의 준비물을 자동으로 추출하여 추가했습니다!\n상단 [💾 저장하기] 버튼을 누르면 완전히 저장됩니다.`);
+        alert(`🎉 캡처가 구글 드라이브에 저장되었으며 ${newItems.length}개의 준비물을 추출했습니다!`);
       } else {
         alert('이미지에서 준비물 항목을 추출하지 못했습니다.');
       }
@@ -544,9 +559,6 @@ export default function WTAApp() {
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
-
-    const localImgUrl = URL.createObjectURL(file);
-    handlePlaceCardChange(targetCardId, 'imageUrl', localImgUrl);
 
     setIsAnalyzing(true);
     const formData = new FormData();
@@ -625,7 +637,6 @@ export default function WTAApp() {
       <div className="flex justify-center bg-gray-100 min-h-screen">
         <main className="w-full max-w-md bg-white min-h-screen flex flex-col justify-center items-center p-6 shadow-md relative overflow-hidden">
           
-          {/* 1. 로그인 화면 좌측 상단 버전 표기 */}
           <span className="absolute top-4 left-4 text-xs font-bold text-gray-800 bg-white/70 px-2 py-1 rounded-md z-20 shadow-sm border border-gray-200">
             {APP_VERSION}
           </span>
@@ -719,7 +730,6 @@ export default function WTAApp() {
         <header className="p-4 border-b border-gray-300 flex justify-between items-center bg-white sticky top-0 z-10">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-blue-600">WTA <span className="text-xs text-gray-700 font-medium">for 경완님</span></h1>
-            {/* 1. 상단 앱 헤더 우측 버전 표기 */}
             <span className="text-[10px] font-extrabold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
               {APP_VERSION}
             </span>
@@ -750,7 +760,6 @@ export default function WTAApp() {
           {activeTab === 'home' && (
             <div className="flex flex-col gap-4">
               
-              {/* 2. 프로필 고정 문구 (Wife -> Wany) */}
               <div className="p-3.5 border-2 border-pink-200 bg-pink-50/60 rounded-2xl flex items-center gap-3 shadow-sm relative">
                 <div 
                   onClick={() => fileInputRefWife.current?.click()}
@@ -1103,7 +1112,7 @@ export default function WTAApp() {
                                   </div>
                                 </div>
                                 <div className="text-[11px] text-gray-600 font-medium">
-                                  <p className="font-bold text-black">등록된 캡처 이미지</p>
+                                  <p className="font-bold text-black">구글 드라이브 캡처 이미지</p>
                                   <p className="text-[10px] text-gray-500">클릭하여 큰 화면으로 보기</p>
                                 </div>
                               </div>
@@ -1380,7 +1389,7 @@ export default function WTAApp() {
                       onClick={() => fileInputRefMemory.current?.click()}
                       className="w-full py-2 bg-pink-50 hover:bg-pink-100 border border-pink-300 text-pink-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-sm transition"
                     >
-                      <Camera className="w-3.5 h-3.5" /> 📸 추억 사진 추가하기
+                      <Camera className="w-3.5 h-3.5" /> 📸 구글 드라이브 추억 사진 추가
                     </button>
 
                     <div className="flex flex-col gap-1.5 mt-1">
