@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 시도 (Quota 없어도 예외 처리 후 AI 파싱으로 진행)
+    // 1. 구글 드라이브 업로드 시도 (드라이브 권한 예외 발생 시에도 AI 분석은 100% 보장)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -65,10 +65,10 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (driveErr) {
-      console.error('Drive upload quota warning (Ignored for AI Analysis):', driveErr);
+      console.error('Drive upload warning (Proceeding to AI Analysis):', driveErr);
     }
 
-    // 2. Gemini AI 분석 (모델 명칭: gemini-1.5-flash 표준 고정)
+    // 2. Gemini AI 스마트 추출 (유연하고 강력한 파싱)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -85,24 +85,26 @@ export async function POST(req: NextRequest) {
         };
 
         if (mode === 'checklist') {
-          const prompt = `이 이미지는 여행 짐싸기 목록, 장보기 영수증, 음식 또는 준비물 이미지야. 이미지에 보이는 텍스트, 물건, 음식 재료들을 모두 찾아내서 짐싸기 체크리스트 항목으로 변환해줘. 반드시 마크다운 글자 없이 아래 형태의 순수 JSON 배열만 반환해줘: [{"category": "음식/식재료", "title": "삼겹살"}, {"category": "캠핑장비", "title": "부탄가스"}]. 카테고리는 무조건 [음식/식재료, 아이용품, 캠핑장비, 의류/세면, 중요사항, 기타] 중 하나로 지정해줘.`;
+          const prompt = `이 이미지는 여행 짐싸기 목록, 장보기 영수증, 음식 또는 준비물 이미지야. 이미지에 보이는 텍스트, 물건, 음식 재료들을 모두 찾아내서 짐싸기 체크리스트 항목으로 변환해줘. 설명 없이 순수 JSON 배열만 반환해줘: [{"category": "음식/식재료", "title": "삼겹살"}, {"category": "캠핑장비", "title": "부탄가스"}]. 카테고리는 무조건 [음식/식재료, 아이용품, 캠핑장비, 의류/세면, 중요사항, 기타] 중 하나로 지정해줘.`;
 
           const result = await model.generateContent([prompt, imagePart]);
           const text = result.response.text();
-          const cleanText = text.replace(/```json|```/g, '').trim();
-          const jsonMatch = cleanText.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            extractedData = JSON.parse(jsonMatch[0]);
+          const firstBracket = text.indexOf('[');
+          const lastBracket = text.lastIndexOf(']');
+          if (firstBracket !== -1 && lastBracket !== -1) {
+            const jsonString = text.substring(firstBracket, lastBracket + 1);
+            extractedData = JSON.parse(jsonString);
           }
         } else if (mode === 'place') {
-          const prompt = `이 이미지는 네이버지도, 인스타그램, 캡처 화면 또는 영수증 이미지야. 이미지에서 관광지/맛집/카페 상호명(name), 주소(address), 팁 정보(tip)를 최우선으로 유추해서 추출해줘. 반드시 마크다운 글자 없이 아래 형태의 순수 JSON 배열만 반환해줘: [{"name": "속초해수욕장", "address": "강원 속초시 조양동", "tip": "주차 가능"}].`;
+          const prompt = `이 이미지는 네이버지도, 인스타그램, 캡처 화면 또는 영수증 이미지야. 이미지에서 관광지/맛집/카페 상호명(name), 주소(address), 팁 정보(tip)를 최우선으로 유추해서 추출해줘. 설명 없이 순수 JSON 배열만 반환해줘: [{"name": "속초해수욕장", "address": "강원 속초시 조양동", "tip": "주차 가능"}].`;
 
           const result = await model.generateContent([prompt, imagePart]);
           const text = result.response.text();
-          const cleanText = text.replace(/```json|```/g, '').trim();
-          const jsonMatch = cleanText.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            extractedData = JSON.parse(jsonMatch[0]);
+          const firstBracket = text.indexOf('[');
+          const lastBracket = text.lastIndexOf(']');
+          if (firstBracket !== -1 && lastBracket !== -1) {
+            const jsonString = text.substring(firstBracket, lastBracket + 1);
+            extractedData = JSON.parse(jsonString);
           }
         }
       } catch (aiErr) {
