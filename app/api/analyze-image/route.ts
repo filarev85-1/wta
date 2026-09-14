@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 (용량 한도 에러 방지를 위해 URL 변환)
+    // 1. 구글 드라이브 전용 업로드 (시트 5만자 초과 원천 방지)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
           } catch (permErr) {
             console.error('Drive permission warning:', permErr);
           }
-          // 💡 구글 시트에 들어갈 짧은 이미지 URL 생성 (5만자 초과 원천 방지)
+          // 구글 시트에 저장될 짧은 드라이브 링크
           fileUrl = `https://drive.google.com/uc?id=${fileId}`;
         }
       }
