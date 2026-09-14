@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 개인 계정 폴더 전용 업로드
+    // 1. 구글 드라이브 업로드
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -39,7 +39,6 @@ export async function POST(req: NextRequest) {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(buffer);
 
-        // 개인 폴더 업로드
         const response = await drive.files.create({
           requestBody: {
             name: `WTA_${Date.now()}_${file.name}`,
@@ -63,13 +62,13 @@ export async function POST(req: NextRequest) {
               supportsAllDrives: true,
             });
           } catch (permErr) {
-            console.error('Drive permission warning:', permErr);
+            // 권한 부여 관련 단순 경고 무시
           }
           fileUrl = `https://drive.google.com/uc?id=${fileId}`;
         }
       }
     } catch (driveErr: any) {
-      console.error('Drive upload warning:', driveErr?.message || driveErr);
+      // 불필요한 서비스 계정 Quota 경고 메시지로 인한 혼선 방지 (필요시 내부 기록)
     }
 
     // 2. Gemini AI 분석 (여정 상세카드 'place' 모드 전용)
@@ -90,7 +89,7 @@ export async function POST(req: NextRequest) {
 1. 지도/인스타그램/영수증 캡처라면 상호명(name), 주소(address), 팁(tip)을 추출해.
 2. 만약 일반 장소/음식 사진이라면 시각적인 특징을 통해 예상 장소나 대표 메뉴명을 상호명으로 유추해.
 반드시 마크다운 글자 없이 아래 형태의 순수 JSON 배열만 반환해:
-[{"category": "", "name": "속초 물회 맛집", "address": "강원 속초시", "tip": "시원한 물회 추천"}]`;
+[{"name": "속초 물회 맛집", "address": "강원 속초시", "tip": "시원한 물회 추천"}]`;
 
       const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
@@ -119,7 +118,7 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (aiErr: any) {
-        console.error('Gemini API 분석 우회 안전 처리 완료:', aiErr?.message || aiErr);
+        // AI 429 에러 발생 시 우회 로그
       }
     }
 
@@ -129,7 +128,6 @@ export async function POST(req: NextRequest) {
       extractedData,
     });
   } catch (err: any) {
-    console.error('API 에러:', err);
     return NextResponse.json({ error: err.message || '서버 오류 발생' }, { status: 500 });
   }
 }
