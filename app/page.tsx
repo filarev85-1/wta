@@ -64,8 +64,8 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
-// 💡 413 Payload Too Large 방지를 위한 모바일 이미지 초경량 압축 (최대 너비 800px, 용량 90% 이상 축소)
-const compressImageToSmallSize = (file: File): Promise<string> => {
+// 💡 초경량 다중 파일 압축 함수
+const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -88,7 +88,7 @@ const compressImageToSmallSize = (file: File): Promise<string> => {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // JPEG 60% 품질로 용량을 약 200KB~400KB로 획기적으로 축소
+        // 60% 품질로 대폭 용량 감축하여 Vercel 413 페이로드 제한 회피
         const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
         resolve(compressedDataUrl);
       };
@@ -408,7 +408,7 @@ export default function WTAApp() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressed = await compressImageToSmallSize(file);
+        const compressed = await compressImage(file);
         setWifePhoto(compressed);
         localStorage.setItem('wta_wife_photo', compressed);
       } catch (err) {
@@ -421,7 +421,7 @@ export default function WTAApp() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressed = await compressImageToSmallSize(file);
+        const compressed = await compressImage(file);
         setLoginBgPhoto(compressed);
         localStorage.setItem('wta_login_bg', compressed);
       } catch (err) {
@@ -452,29 +452,33 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  // 🔥 413 에러 방지 추억 사진 즉시 압축 및 등록
+  // 🔥 [핵심 보완] 다중 이미지 일괄 압축 및 등록 (여러 장 한 번에 선택 가능)
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedMemoryTripId) return;
+    const files = e.target.files;
+    if (!files || files.length === 0 || !selectedMemoryTripId) return;
 
     try {
       setIsSyncing(true);
-      // 브라우저에서 용량을 300KB 수준으로 강력 축소
-      const compressedImage = await compressImageToSmallSize(file);
+      const newImagesList: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const compressed = await compressImage(files[i]);
+        newImagesList.push(compressed);
+      }
 
       const updatedMemories = memoryTrips.map(t => {
         if (t.id === selectedMemoryTripId) {
-          const imgs = t.memoriesImages || [];
-          return { ...t, memoriesImages: [...imgs, compressedImage] };
+          const existingImgs = t.memoriesImages || [];
+          return { ...t, memoriesImages: [...existingImgs, ...newImagesList] };
         }
         return t;
       });
 
       setMemoryTrips(updatedMemories);
       setHasUnsavedChanges(true);
-      alert('📸 추억 사진이 추가되었습니다!\n상단 [💾 저장하기] 버튼을 누르시면 안전하게 동기화 저장됩니다.');
+      alert(`📸 ${files.length}장의 사진이 추가되었습니다!\n상단 [💾 저장하기] 버튼을 누르면 구글 시트에 안전하게 반영됩니다.`);
     } catch (err) {
-      alert('사진을 추가하는 도중 오류가 발생했습니다.');
+      alert('사진 추가 도중 에러가 발생했습니다.');
     } finally {
       setIsSyncing(false);
     }
@@ -499,10 +503,8 @@ export default function WTAApp() {
 
     setIsAnalyzing(true);
     try {
-      // 413 에러 방지를 위해 미리 압축된 데이터 생성 후 전송
-      const compressedImage = await compressImageToSmallSize(file);
+      const compressedImage = await compressImage(file);
       
-      // Data URL을 Blob 파일로 변환
       const res = await fetch(compressedImage);
       const blob = await res.blob();
       const smallFile = new File([blob], file.name, { type: 'image/jpeg' });
@@ -545,7 +547,7 @@ export default function WTAApp() {
 
     setIsAnalyzing(true);
     try {
-      const compressedImage = await compressImageToSmallSize(file);
+      const compressedImage = await compressImage(file);
       handlePlaceCardChange(targetCardId, 'imageUrl', compressedImage);
 
       const res = await fetch(compressedImage);
@@ -696,13 +698,17 @@ export default function WTAApp() {
           onChange={handleAnalyzeCardImage} 
           className="hidden" 
         />
+        
+        {/* 🔥 다중 이미지 지원 (multiple 속성 추가) */}
         <input 
           type="file" 
           accept="image/*" 
+          multiple
           ref={fileInputRefMemory} 
           onChange={handleAddMemoryImage} 
           className="hidden" 
         />
+        
         <input 
           type="file" 
           accept="image/*" 
@@ -1371,7 +1377,7 @@ export default function WTAApp() {
                       onClick={() => fileInputRefMemory.current?.click()}
                       className="w-full py-2 bg-pink-50 hover:bg-pink-100 border border-pink-300 text-pink-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-sm transition"
                     >
-                      <Camera className="w-3.5 h-3.5" /> 📸 추억 사진 추가하기
+                      <Camera className="w-3.5 h-3.5" /> 📸 추억 사진 추가하기 (여러 장 가능)
                     </button>
 
                     <div className="flex flex-col gap-1.5 mt-1">
