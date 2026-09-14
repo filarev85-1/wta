@@ -33,8 +33,13 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const dataType = url.searchParams.get('type');
 
-    // 💡 생성하신 Checklist, Trips 탭 이름으로 명확하게 지정
-    const range = dataType === 'trips' ? 'Trips!A1' : 'Checklist!A1';
+    // 💡 type에 따라 Checklist, Trips, Remember 탭으로 각각 분리 조회
+    let range = 'Checklist!A1';
+    if (dataType === 'trips') {
+      range = 'Trips!A1';
+    } else if (dataType === 'remember') {
+      range = 'Remember!A1';
+    }
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -42,12 +47,14 @@ export async function GET(req: NextRequest) {
     });
 
     const rawData = response.data.values?.[0]?.[0];
+    const parsedData = rawData ? JSON.parse(rawData) : [];
+
     if (dataType === 'trips') {
-      const trips = rawData ? JSON.parse(rawData) : [];
-      return NextResponse.json({ trips });
+      return NextResponse.json({ trips: parsedData });
+    } else if (dataType === 'remember') {
+      return NextResponse.json({ memories: parsedData });
     } else {
-      const checklists = rawData ? JSON.parse(rawData) : [];
-      return NextResponse.json({ checklists });
+      return NextResponse.json({ checklists: parsedData });
     }
   } catch (err: any) {
     console.error('Sheets GET 에러:', err);
@@ -61,25 +68,33 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     if (body.type === 'trips') {
+      // 💡 여정 데이터 -> Trips!A1 적재
       const tripsJson = JSON.stringify(body.trips || []);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: 'Trips!A1',
         valueInputOption: 'USER_ENTERED',
-        requestBody: {
-          values: [[tripsJson]],
-        },
+        requestBody: { values: [[tripsJson]] },
       });
       return NextResponse.json({ success: true, message: '여정 저장 완료' });
+    } else if (body.type === 'remember') {
+      // 💡 추억 데이터 -> Remember!A1 적재
+      const memoriesJson = JSON.stringify(body.memories || []);
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Remember!A1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[memoriesJson]] },
+      });
+      return NextResponse.json({ success: true, message: '추억 저장 완료' });
     } else {
+      // 💡 체크리스트 데이터 -> Checklist!A1 적재
       const checklistJson = JSON.stringify(body.checklists || []);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: 'Checklist!A1',
         valueInputOption: 'USER_ENTERED',
-        requestBody: {
-          values: [[checklistJson]],
-        },
+        requestBody: { values: [[checklistJson]] },
       });
       return NextResponse.json({ success: true, message: '체크리스트 저장 완료' });
     }

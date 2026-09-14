@@ -6,8 +6,8 @@ import {
   Plus, Trash2, Camera, X, RefreshCw, ChevronLeft, Calendar, Clock, Image as ImageIcon, ExternalLink, Maximize2, ListChecks, Edit3, Heart, ChevronRight as ChevronRightIcon, Sparkles, Save, Settings
 } from 'lucide-react';
 
-// 💡 현시점 고정 버전 (특별한 지정이 없을 시 1.0.1, 1.0.2 순으로 자동 업데이트)
-const APP_VERSION = 'v1.0.2';
+// 💡 버전 자동 업데이트: v1.0.7
+const APP_VERSION = 'v1.0.7';
 
 interface PlaceCard {
   id: string;
@@ -170,7 +170,11 @@ export default function WTAApp() {
   const loadAllDataFromSheets = async () => {
     setIsSyncing(true);
     try {
-      await Promise.all([fetchChecklistFromSheets(), fetchTripsFromSheets()]);
+      await Promise.all([
+        fetchChecklistFromSheets(), 
+        fetchTripsFromSheets(), 
+        fetchMemoriesFromSheets()
+      ]);
     } catch (err) {
       console.error('데이터 로드 오류:', err);
     } finally {
@@ -197,13 +201,25 @@ export default function WTAApp() {
       const data = await res.json();
       if (data.trips && Array.isArray(data.trips)) {
         setTrips(data.trips);
-        setMemoryTrips(data.trips);
       }
     } catch (err) {
       console.error('여정 목록 로드 실패:', err);
     }
   };
 
+  const fetchMemoriesFromSheets = async () => {
+    try {
+      const res = await fetch('/api/sheets?type=remember');
+      const data = await res.json();
+      if (data.memories && Array.isArray(data.memories)) {
+        setMemoryTrips(data.memories);
+      }
+    } catch (err) {
+      console.error('추억 목록 로드 실패:', err);
+    }
+  };
+
+  // 💡 Checklist, Trips, Remember 3개 탭 각각 시트에 분리 저장
   const handleManualSave = async () => {
     setIsSyncing(true);
     try {
@@ -217,6 +233,12 @@ export default function WTAApp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'trips', trips }),
+      });
+
+      await fetch('/api/sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'remember', memories: memoryTrips }),
       });
 
       setHasUnsavedChanges(false);
@@ -733,7 +755,6 @@ export default function WTAApp() {
           className="hidden" 
         />
 
-        {/* 💡 헤더: 좌측 상단 WTA 로고 바로 옆 버전 고정 표기 (APP_VERSION) */}
         <header className="p-4 border-b border-gray-300 flex justify-between items-center bg-white sticky top-0 z-10 flex-shrink-0">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-blue-600">WTA</h1>
