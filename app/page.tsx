@@ -64,7 +64,7 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
-// 💡 구글 시트 50,000자 제한을 절대 넘지 않는 초고효율 압축 (Max 350px, Quality 0.35)
+// 💡 캔버스 초경량 썸네일 생성 함수 (시트 5만자 오버플로우 방지)
 const compressImageForSheet = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -74,7 +74,7 @@ const compressImageForSheet = (file: File): Promise<string> => {
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxWidth = 350;
+        const maxWidth = 250;
         let width = img.width;
         let height = img.height;
 
@@ -90,7 +90,8 @@ const compressImageForSheet = (file: File): Promise<string> => {
           ctx.drawImage(img, 0, 0, width, height);
         }
 
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.35);
+        // 품질 0.3으로 초경량화하여 문자열 5,000자 이내 제어
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.3);
         resolve(compressedDataUrl);
       };
       img.onerror = (err) => reject(err);
@@ -476,7 +477,7 @@ export default function WTAApp() {
 
       setMemoryTrips(updatedMemories);
       setHasUnsavedChanges(true);
-      alert(`📸 ${files.length}장의 사진이 추가되었습니다!\n상단 [💾 저장하기] 버튼을 누르면 구글 시트에 안전하게 저장됩니다.`);
+      alert(`📸 ${files.length}장의 사진이 추가되었습니다!\n상단 [💾 저장하기] 버튼을 누르면 구글 시트에 저장됩니다.`);
     } catch (err) {
       alert('사진 추가 도중 에러가 발생했습니다.');
     } finally {
@@ -537,7 +538,7 @@ export default function WTAApp() {
     }
   };
 
-  // 🔥 동선 카드 캡처 주소/상호명 분석 보완
+  // 🔥 동선 카드 캡처 파싱 처리
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
@@ -545,8 +546,7 @@ export default function WTAApp() {
     setIsAnalyzing(true);
     try {
       const compressedImage = await compressImageForSheet(file);
-      handlePlaceCardChange(targetCardId, 'imageUrl', compressedImage);
-
+      
       const formData = new FormData();
       formData.append('file', file);
       formData.append('mode', 'place');
@@ -554,9 +554,8 @@ export default function WTAApp() {
       const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
       const data = await apiRes.json();
 
-      if (data.fileUrl) {
-        handlePlaceCardChange(targetCardId, 'imageUrl', data.fileUrl);
-      }
+      const cardImgUrl = data.fileUrl || compressedImage;
+      handlePlaceCardChange(targetCardId, 'imageUrl', cardImgUrl);
 
       if (data.extractedData && data.extractedData.length > 0) {
         const extracted = data.extractedData[0];
@@ -1195,7 +1194,6 @@ export default function WTAApp() {
                     </button>
                   </div>
 
-                  {/* 💡 [3번 보완] 체크리스트 입력 UI 밀림 방지 */}
                   <div className="flex items-center gap-1.5 mt-1 w-full">
                     <select 
                       value={selectedCategory} 
