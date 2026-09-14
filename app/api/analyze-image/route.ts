@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 (구글 시트 5만자 초과 방지용 URL 발행)
+    // 1. 구글 드라이브 전용 업로드 (구글 시트 5만 자 제한 원천 방지)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       console.error('Drive upload warning:', driveErr?.message || driveErr);
     }
 
-    // 2. 최신 Gemini AI 모델 적용 (gemini-2.5-flash / gemini-flash-latest)
+    // 2. 최신 제미나이 무료 표준 모델 호출 (gemini-flash-latest)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -98,28 +98,22 @@ export async function POST(req: NextRequest) {
 [{"name": "속초 물회 맛집", "address": "강원 속초시", "tip": "시원한 물회 추천"}]`;
       }
 
-      // 💡 종료된 1.5 대신 최신 2.5 및 최신 라벨 모델로 지정
-      const candidateModels = ['gemini-2.5-flash', 'gemini-flash-latest'];
-      let aiResponseText = '';
+      try {
+        // 💡 무료 플랜에서 사용 가능한 최신 모델로 고정
+        const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+        const result = await model.generateContent([prompt, imagePart]);
+        const aiResponseText = result.response.text();
 
-      for (const modelName of candidateModels) {
-        try {
-          const model = genAI.getGenerativeModel({ model: modelName });
-          const result = await model.generateContent([prompt, imagePart]);
-          aiResponseText = result.response.text();
-          if (aiResponseText) break;
-        } catch (modelErr) {
-          console.warn(`Model ${modelName} failed:`, modelErr);
+        if (aiResponseText) {
+          const firstBracket = aiResponseText.indexOf('[');
+          const lastBracket = aiResponseText.lastIndexOf(']');
+          if (firstBracket !== -1 && lastBracket !== -1) {
+            const jsonString = aiResponseText.substring(firstBracket, lastBracket + 1);
+            extractedData = JSON.parse(jsonString);
+          }
         }
-      }
-
-      if (aiResponseText) {
-        const firstBracket = aiResponseText.indexOf('[');
-        const lastBracket = aiResponseText.lastIndexOf(']');
-        if (firstBracket !== -1 && lastBracket !== -1) {
-          const jsonString = aiResponseText.substring(firstBracket, lastBracket + 1);
-          extractedData = JSON.parse(jsonString);
-        }
+      } catch (aiErr: any) {
+        console.error('Gemini API 분석 오류:', aiErr?.message || aiErr);
       }
     }
 
