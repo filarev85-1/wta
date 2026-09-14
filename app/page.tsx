@@ -64,6 +64,38 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
+// 💡 모바일 고화질 이미지 자동 압축 함수
+const compressImage = (file: File, maxWidth = 1000, quality = 0.7): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
+
 export default function WTAApp() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
@@ -370,29 +402,29 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
-  const handleWifePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleWifePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setWifePhoto(base64String);
-        localStorage.setItem('wta_wife_photo', base64String);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 400, 0.8);
+        setWifePhoto(compressed);
+        localStorage.setItem('wta_wife_photo', compressed);
+      } catch (err) {
+        console.error('프로필 사진 처리 에러:', err);
+      }
     }
   };
 
-  const handleLoginBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLoginBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setLoginBgPhoto(base64String);
-        localStorage.setItem('wta_login_bg', base64String);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 800, 0.7);
+        setLoginBgPhoto(compressed);
+        localStorage.setItem('wta_login_bg', compressed);
+      } catch (err) {
+        console.error('배경 사진 처리 에러:', err);
+      }
     }
   };
 
@@ -418,25 +450,32 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  // 🔥 추억 탭 사진 영구 저장 업로드 처리 (Base64 인코딩)
-  const handleAddMemoryImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 🔥 추억 탭 사진 자동 용량 압축 및 영구 업로드 처리
+  const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedMemoryTripId) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64Image = reader.result as string;
+    try {
+      setIsSyncing(true);
+      // 고화질 사진을 적정 해상도로 자동 압축하여 용량 축소
+      const compressedImage = await compressImage(file, 1000, 0.75);
+
       const updatedMemories = memoryTrips.map(t => {
         if (t.id === selectedMemoryTripId) {
           const imgs = t.memoriesImages || [];
-          return { ...t, memoriesImages: [...imgs, base64Image] };
+          return { ...t, memoriesImages: [...imgs, compressedImage] };
         }
         return t;
       });
+
       setMemoryTrips(updatedMemories);
       setHasUnsavedChanges(true);
-    };
-    reader.readAsDataURL(file);
+      alert('📸 추억 사진이 추가되었습니다!\n상단 [💾 저장하기] 버튼을 누르면 구글 시트에 최종 저장됩니다.');
+    } catch (err) {
+      alert('사진을 처리하는 도중 오류가 발생했습니다.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleDeletePlaceCard = (cardId: string) => {
