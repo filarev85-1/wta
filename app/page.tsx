@@ -175,7 +175,7 @@ export default function WTAApp() {
       });
 
       setHasUnsavedChanges(false);
-      alert('💾 구글 시트 동기화 완! 모바일과 웹에 동일하게 적용되었습니다.');
+      alert('💾 구글 시트 동기화 완료! 모바일과 웹에 동일하게 적용되었습니다.');
     } catch (err) {
       alert('저장 중 오류가 발생했습니다.');
     } finally {
@@ -212,7 +212,6 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
-  // 새 여정 생성 시 최초 카드는 오전 07:00 세팅
   const handleCreateTrip = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTripTitle.trim() || !newStartDate || !newEndDate) {
@@ -281,7 +280,6 @@ export default function WTAApp() {
     }
   };
 
-  // 1. 세부동선 카드 추가 시 이전 카드 기준 +2시간 자동 계산
   const handleAddPlaceCard = () => {
     if (!selectedTripId) return;
     const currentTrip = trips.find(t => t.id === selectedTripId);
@@ -297,15 +295,12 @@ export default function WTAApp() {
       let lastHourNum = parseInt(lastPlace.hour || '10', 10);
       nextMinute = lastPlace.minute || '00';
 
-      // 24시간 체계로 변환
       let totalHour24 = (lastAmpm === '오후' && lastHourNum !== 12) 
         ? lastHourNum + 12 
         : (lastAmpm === '오전' && lastHourNum === 12) ? 0 : lastHourNum;
 
-      // +2시간 추가
       totalHour24 = (totalHour24 + 2) % 24;
 
-      // 다시 AM/PM 및 12시간 체계로 변환
       if (totalHour24 >= 12) {
         nextAmpm = '오후';
         const h = totalHour24 === 12 ? 12 : totalHour24 - 12;
@@ -423,20 +418,25 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
+  // 🔥 추억 탭 사진 영구 저장 업로드 처리 (Base64 인코딩)
   const handleAddMemoryImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedMemoryTripId) return;
 
-    const imgUrl = URL.createObjectURL(file);
-    const updatedMemories = memoryTrips.map(t => {
-      if (t.id === selectedMemoryTripId) {
-        const imgs = t.memoriesImages || [];
-        return { ...t, memoriesImages: [...imgs, imgUrl] };
-      }
-      return t;
-    });
-    setMemoryTrips(updatedMemories);
-    setHasUnsavedChanges(true);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64Image = reader.result as string;
+      const updatedMemories = memoryTrips.map(t => {
+        if (t.id === selectedMemoryTripId) {
+          const imgs = t.memoriesImages || [];
+          return { ...t, memoriesImages: [...imgs, base64Image] };
+        }
+        return t;
+      });
+      setMemoryTrips(updatedMemories);
+      setHasUnsavedChanges(true);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleDeletePlaceCard = (cardId: string) => {
