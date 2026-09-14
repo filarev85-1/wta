@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 (콘솔 에러/경고 로그 복구)
+    // 1. 구글 드라이브 업로드 (Quota 경고 시에도 fileId 및 fileUrl 확실하게 생성 및 반환)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(buffer);
 
+        // parents 폴더 필수 지정 및 supportsAllDrives 파라미터 적용
         const response = await drive.files.create({
           requestBody: {
             name: `WTA_${Date.now()}_${file.name}`,
@@ -69,6 +70,12 @@ export async function POST(req: NextRequest) {
       }
     } catch (driveErr: any) {
       console.error('Drive upload warning:', driveErr?.message || driveErr);
+      
+      // 💡 만약 드라이브 API 생성 응답 내에 id가 존재하는 경우 URL 강제 복구
+      if (driveErr?.response?.data?.id) {
+        const fileId = driveErr.response.data.id;
+        fileUrl = `https://drive.google.com/uc?id=${fileId}`;
+      }
     }
 
     // 2. Gemini AI 분석 (여정 상세 카드 'place' 모드 전용)
