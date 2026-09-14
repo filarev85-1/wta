@@ -64,7 +64,6 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
-// 💡 구글 시트 셀 제한(50,000자)을 절대 넘지 않는 초고효율 압축 함수
 const compressImageForSheet = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -90,7 +89,6 @@ const compressImageForSheet = (file: File): Promise<string> => {
           ctx.drawImage(img, 0, 0, width, height);
         }
 
-        // 품질 0.5로 설정하여 문자열 길이를 약 20,000자~30,000자 이내로 제어
         const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.5);
         resolve(compressedDataUrl);
       };
@@ -153,6 +151,7 @@ export default function WTAApp() {
   const fileInputRefLoginBg = useRef<HTMLInputElement>(null);
   const [targetCardId, setTargetCardId] = useState<string | null>(null);
 
+  // 로그인 시 무조건 구글 시트 복원 호출
   useEffect(() => {
     if (isAuthenticated) {
       loadAllDataFromSheets();
@@ -454,7 +453,6 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  // 🔥 50,000자 셀 한계 극복 다중 압축 추가
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !selectedMemoryTripId) return;
@@ -543,7 +541,6 @@ export default function WTAApp() {
     }
   };
 
-  // 🔥 동선 카드 캡처 주소 및 상호명 자동 인식 개선
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
@@ -685,7 +682,6 @@ export default function WTAApp() {
 
   return (
     <div className="flex justify-center bg-gray-100 min-h-screen">
-      {/* 💡 하단 탭 메뉴 고정을 위한 h-screen & relative 레이아웃 보완 */}
       <main className="w-full max-w-md bg-white h-screen flex flex-col relative shadow-lg overflow-hidden">
         
         <input 
@@ -721,12 +717,14 @@ export default function WTAApp() {
         <header className="p-4 border-b border-gray-300 flex justify-between items-center bg-white sticky top-0 z-10 flex-shrink-0">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-blue-600">WTA <span className="text-xs text-gray-700 font-medium">for 경완님</span></h1>
+            {/* 💡 데이터 수동 불러오기 및 복원 버튼 */}
             <button 
               onClick={loadAllDataFromSheets}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded-lg"
-              title="구글 시트 최신데이터 동기화"
+              className="p-1.5 bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg flex items-center gap-1 text-xs font-bold transition border"
+              title="구글 시트 데이터 불러오기"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-600' : ''}`} />
+              <span>동기화</span>
             </button>
           </div>
           
@@ -750,7 +748,6 @@ export default function WTAApp() {
           </div>
         )}
 
-        {/* 💡 컨텐츠 영역만 스크롤되도록 pb-20 영역 확보 */}
         <div className="flex-1 p-4 overflow-y-auto pb-20">
           {/* 홈 탭 */}
           {activeTab === 'home' && (
@@ -1169,7 +1166,7 @@ export default function WTAApp() {
                       ))
                     ) : (
                       <div className="p-8 text-center text-xs text-gray-500 border-2 border-dashed rounded-2xl font-medium">
-                        등록된 여정이 없습니다. 새 여정을 만들어 보세요!
+                        등록된 여정이 없습니다. 상단 '동기화' 버튼을 누르면 구글 시트 데이터가 나타납니다!
                       </div>
                     )}
                   </div>
@@ -1545,7 +1542,6 @@ export default function WTAApp() {
           </div>
         )}
 
-        {/* 💡 하단 네비게이션 메인 화면에 고정 (absolute bottom-0 & z-20) */}
         <nav className="absolute bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-300 flex justify-around items-center z-20 shadow-md">
           <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center ${activeTab === 'home' ? 'text-blue-600 font-bold' : 'text-gray-700'}`}>
             <Home className="w-5 h-5" />
