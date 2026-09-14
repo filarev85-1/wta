@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 // 💡 현시점 고정 버전 (특별한 지정이 없을 시 1.0.1, 1.0.2 순으로 자동 업데이트)
-const APP_VERSION = 'v1.0.1';
+const APP_VERSION = 'v1.0.2';
 
 interface PlaceCard {
   id: string;

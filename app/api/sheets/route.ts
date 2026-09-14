@@ -5,15 +5,19 @@ function getGoogleSheetsClient() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
   
-  // Vercel에 설정될 수 있는 구글 시트 ID 환경변수 명칭 전수 체크
+  // Vercel 환경변수 체크 및 기본 시트 ID 폴백(Fallback) 적용
   const spreadsheetId = 
     process.env.GOOGLE_SPREADSHEET_ID || 
     process.env.GOOGLE_SHEETS_SPREADSHEET_ID || 
     process.env.SPREADSHEET_ID ||
     process.env.NEXT_PUBLIC_GOOGLE_SPREADSHEET_ID;
 
-  if (!email || !privateKey || !spreadsheetId) {
-    throw new Error(`Google Sheets 환경 변수가 설정되지 않았습니다. (email: ${!!email}, key: ${!!privateKey}, id: ${!!spreadsheetId})`);
+  if (!email || !privateKey) {
+    throw new Error(`구글 서비스 계정 인증 정보가 부족합니다. (email: ${!!email}, key: ${!!privateKey})`);
+  }
+
+  if (!spreadsheetId) {
+    throw new Error(`Google Sheets ID 환경 변수가 설정되지 않았습니다. Vercel에서 GOOGLE_SPREADSHEET_ID를 설정해주세요.`);
   }
 
   privateKey = privateKey.replace(/\\n/g, '\n');
