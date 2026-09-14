@@ -559,7 +559,6 @@ export default function WTAApp() {
     }
   };
 
-  // 🔥 캡처 분석 결과 상호명/주소 자동 채움 및 네이버 지도 링크 즉시 생성
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
@@ -651,7 +650,7 @@ export default function WTAApp() {
             className="absolute top-4 right-4 p-2 bg-white/60 hover:bg-white/90 text-gray-700 rounded-full shadow-sm z-20 transition"
             title="제작자 전용: 로그인 배경 이미지 변경"
           >
-            <Settings className="w-4 h-4"/>
+            <Settings className="w-4 h-4" />
           </button>
           
           <input 
@@ -671,7 +670,7 @@ export default function WTAApp() {
 
             <form onSubmit={handleLogin} className="w-full max-w-xs flex flex-col gap-3">
               <div className="relative">
-                <Lock className="absolute left-3 top-3.5 text-gray-600 w-5 h-5"/>
+                <Lock className="absolute left-3 top-3.5 text-gray-600 w-5 h-5" />
                 <input
                   type="password"
                   placeholder="비밀번호 입력"
@@ -735,7 +734,7 @@ export default function WTAApp() {
               className="p-1.5 bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg flex items-center gap-1 text-xs font-bold transition border"
               title="구글 시트 데이터 불러오기"
             >
-              <RefreshCw ${isSyncing ''}`} 'animate-spin : ? className="{`w-3.5" h-3.5 text-blue-600'/>
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-600' : ''}`} />
               <span>동기화</span>
             </button>
           </div>
@@ -749,14 +748,14 @@ export default function WTAApp() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
             }`}
           >
-            {isSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin"/> : <Save className="w-3.5 h-3.5"/>}
+            {isSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
             <span>{hasUnsavedChanges ? '💾 저장하기' : '저장 완료'}</span>
           </button>
         </header>
 
         {isAnalyzing && (
           <div className="bg-purple-600 text-white text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-2 flex-shrink-0">
-            <RefreshCw className="w-4 h-4 animate-spin"/> 구글 드라이브 업로드 및 캡처 인식 중...
+            <RefreshCw className="w-4 h-4 animate-spin" /> 구글 드라이브 업로드 및 캡처 인식 중...
           </div>
         )}
 
@@ -773,13 +772,13 @@ export default function WTAApp() {
                 >
                   <img src={wifePhoto} alt="아내 프로필" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition">
-                    <Camera className="w-4 h-4 text-white"/>
+                    <Camera className="w-4 h-4 text-white" />
                   </div>
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1 text-pink-600 font-extrabold text-xs">
-                    <Heart className="w-3.5 h-3.5 fill-pink-600"/>
+                    <Heart className="w-3.5 h-3.5 fill-pink-600" />
                     <span>My Dearest Wife</span>
                   </div>
                   <p className="text-xs font-bold text-black mt-0.5">
@@ -812,7 +811,7 @@ export default function WTAApp() {
                 onClick={() => setIsWizardOpen(true)}
                 className="w-full p-4 bg-white border-2 border-blue-500 rounded-2xl flex items-center justify-center gap-2 hover:bg-blue-50 transition shadow-sm"
               >
-                <Plus className="w-5 h-5 text-blue-600"/>
+                <Plus className="w-5 h-5 text-blue-600" />
                 <span className="text-sm font-bold text-blue-700">새 여정 생성하기</span>
               </button>
 
@@ -833,16 +832,16 @@ export default function WTAApp() {
               <div className="border-2 border-gray-200 rounded-2xl p-4 bg-white shadow-sm flex flex-col gap-3 mt-1 relative">
                 <div className="flex justify-between items-center border-b border-gray-100 pb-2">
                   <div className="flex items-center gap-1.5 font-bold text-black text-sm">
-                    <Calendar className="w-4 h-4 text-blue-600"/>
+                    <Calendar className="w-4 h-4 text-blue-600" />
                     <span>{currentCalDate.getFullYear()}년 {currentCalDate.getMonth() + 1}월 달력</span>
                   </div>
 
                   <div className="flex items-center gap-1">
                     <button onClick={prevMonth} className="p-1 rounded-lg hover:bg-gray-100 text-gray-600">
-                      <ChevronLeft className="w-4 h-4"/>
+                      <ChevronLeft className="w-4 h-4" />
                     </button>
                     <button onClick={nextMonth} className="p-1 rounded-lg hover:bg-gray-100 text-gray-600">
-                      <ChevronRight className="w-4 h-4"/>
+                      <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -937,7 +936,7 @@ export default function WTAApp() {
                         보기
                       </button>
                       <button onClick={() => setSelectedCalTrip(null)} className="text-gray-400 hover:text-black p-1">
-                        <X className="w-4 h-4"/>
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -957,14 +956,14 @@ export default function WTAApp() {
                       onClick={() => setSelectedTripId(null)}
                       className="flex items-center gap-1 text-xs text-blue-600 font-bold"
                     >
-                      <ChevronLeft className="w-4 h-4"/> 전체 여정 목록으로
+                      <ChevronLeft className="w-4 h-4" /> 전체 여정 목록으로
                     </button>
 
                     <button 
                       onClick={(e) => handleDeleteTrip(selectedTrip.id, e)}
                       className="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1 flex items-center gap-1"
                     >
-                      <Trash2 className="w-3.5 h-3.5"/> 여정 삭제
+                      <Trash2 className="w-3.5 h-3.5" /> 여정 삭제
                     </button>
                   </div>
                   
@@ -980,11 +979,11 @@ export default function WTAApp() {
                           className="font-bold text-base text-black bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none w-full"
                           placeholder="여정 제목 입력"
                         />
-                        <Edit3 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0"/>
+                        <Edit3 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                       </div>
 
                       <p className="text-xs text-gray-600 mt-1 flex items-center gap-1 font-medium">
-                        <Calendar className="w-3.5 h-3.5"/> {selectedTrip.startDate} ~ {selectedTrip.endDate}
+                        <Calendar className="w-3.5 h-3.5" /> {selectedTrip.startDate} ~ {selectedTrip.endDate}
                       </p>
                     </div>
 
@@ -995,7 +994,7 @@ export default function WTAApp() {
                       }}
                       className="bg-purple-50 hover:bg-purple-100 border border-purple-300 text-purple-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-sm transition flex-shrink-0"
                     >
-                      <ListChecks className="w-4 h-4"/> 체크리스트
+                      <ListChecks className="w-4 h-4" /> 체크리스트
                     </button>
                   </div>
 
@@ -1005,14 +1004,13 @@ export default function WTAApp() {
                       onClick={handleAddPlaceCard}
                       className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded-lg font-bold shadow flex items-center gap-1"
                     >
-                      <Plus className="w-3.5 h-3.5"/> 카드 추가
+                      <Plus className="w-3.5 h-3.5" /> 카드 추가
                     </button>
                   </div>
 
                   <div className="flex flex-col gap-3">
                     {selectedTrip.places && selectedTrip.places.length > 0 ? (
                       selectedTrip.places.map((place) => {
-                        // 🔥 완화된 조건: 상호명(name) 또는 주소(address) 중 하나라도 있으면 즉시 네이버 지도 버튼 표시
                         const searchQuery = (place.name || place.address || '').trim();
                         const effectiveMapUrl = searchQuery 
                           ? `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(searchQuery)}` 
@@ -1027,7 +1025,7 @@ export default function WTAApp() {
                                 </span>
                                 
                                 <div className="flex items-center gap-1 bg-gray-50 border border-gray-300 rounded-lg px-2 py-1">
-                                  <Clock className="w-3.5 h-3.5 text-blue-600"/>
+                                  <Clock className="w-3.5 h-3.5 text-blue-600" />
                                   <select 
                                     value={place.ampm || '오전'} 
                                     onChange={(e) => handlePlaceCardChange(place.id, 'ampm', e.target.value)}
@@ -1062,7 +1060,7 @@ export default function WTAApp() {
                                 onClick={() => handleDeletePlaceCard(place.id)}
                                 className="text-gray-400 hover:text-red-500 p-1"
                               >
-                                <Trash2 className="w-4 h-4"/>
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
 
@@ -1084,7 +1082,6 @@ export default function WTAApp() {
                               />
                             </div>
 
-                            {/* 🔥 상호명이나 주소가 단 하나라도 입력되어 있으면 실시간으로 표시되는 지도 연동 버튼 */}
                             {effectiveMapUrl && (
                               <a 
                                 href={effectiveMapUrl} 
@@ -1093,7 +1090,7 @@ export default function WTAApp() {
                                 className="text-xs text-green-700 bg-green-50 border border-green-300 font-bold px-3 py-1.5 rounded-xl flex items-center justify-between hover:bg-green-100 transition mt-1 shadow-sm"
                               >
                                 <span>📍 네이버 지도에서 보기</span>
-                                <ExternalLink className="w-3.5 h-3.5"/>
+                                <ExternalLink className="w-3.5 h-3.5" />
                               </a>
                             )}
 
@@ -1109,7 +1106,7 @@ export default function WTAApp() {
                                   }}
                                   className="text-[11px] text-purple-700 font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1 rounded-lg flex items-center gap-1 transition"
                                 >
-                                  <ImageIcon className="w-3 h-3"/> 📸 캡처 사진 인식
+                                  <ImageIcon className="w-3 h-3" /> 📸 캡처 사진 인식
                                 </button>
                               </div>
 
@@ -1121,7 +1118,7 @@ export default function WTAApp() {
                                   >
                                     <img src={place.imageUrl} alt="캡처 미리보기" className="w-full h-full object-cover" />
                                     <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 flex items-center justify-center transition">
-                                      <Maximize2 className="w-3.5 h-3.5 text-white"/>
+                                      <Maximize2 className="w-3.5 h-3.5 text-white" />
                                     </div>
                                   </div>
                                   <div className="text-[11px] text-gray-600 font-medium">
@@ -1144,7 +1141,7 @@ export default function WTAApp() {
                       onClick={handleAddPlaceCard}
                       className="w-full py-3 bg-white border-2 border-dashed border-gray-300 rounded-2xl text-xs font-bold text-gray-600 hover:border-blue-500 hover:text-blue-600 transition flex items-center justify-center gap-1 mt-1"
                     >
-                      <Plus className="w-4 h-4"/> 새 동선 카드 추가
+                      <Plus className="w-4 h-4" /> 새 동선 카드 추가
                     </button>
                   </div>
                 </div>
@@ -1156,7 +1153,7 @@ export default function WTAApp() {
                       onClick={() => setIsWizardOpen(true)}
                       className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-xl font-bold shadow flex items-center gap-1"
                     >
-                      <Plus className="w-3.5 h-3.5"/> 새 여정
+                      <Plus className="w-3.5 h-3.5" /> 새 여정
                     </button>
                   </div>
 
@@ -1172,7 +1169,7 @@ export default function WTAApp() {
                             <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">{trip.type}</span>
                             <h3 className="font-bold text-sm text-black mt-1">{trip.title}</h3>
                             <p className="text-xs text-gray-600 mt-1 font-medium flex items-center gap-1">
-                              <Calendar className="w-3.5 h-3.5"/> {trip.startDate} ~ {trip.endDate}
+                              <Calendar className="w-3.5 h-3.5" /> {trip.startDate} ~ {trip.endDate}
                             </p>
                           </div>
 
@@ -1181,7 +1178,7 @@ export default function WTAApp() {
                             className="text-gray-400 hover:text-red-500 p-2"
                             title="여정 삭제"
                           >
-                            <Trash2 className="w-4 h-4"/>
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ))
@@ -1205,7 +1202,7 @@ export default function WTAApp() {
                     onClick={() => setSelectedChecklistTripId(null)}
                     className="flex items-center gap-1 text-xs text-purple-600 font-bold self-start"
                   >
-                    <ChevronLeft className="w-4 h-4"/> 전체 체크리스트 여정 목록으로
+                    <ChevronLeft className="w-4 h-4" /> 전체 체크리스트 여정 목록으로
                   </button>
 
                   <div className="flex justify-between items-center border-b border-gray-200 pb-2">
@@ -1220,7 +1217,7 @@ export default function WTAApp() {
                       onClick={() => fileInputRefChecklist.current?.click()}
                       className="text-xs text-purple-700 font-bold border-2 border-purple-300 px-2.5 py-1.5 rounded-xl flex items-center gap-1 bg-purple-50 shadow-sm"
                     >
-                      <Camera className="w-3.5 h-3.5"/> 캡처 업로드
+                      <Camera className="w-3.5 h-3.5" /> 캡처 업로드
                     </button>
                   </div>
 
@@ -1272,13 +1269,13 @@ export default function WTAApp() {
                               >
                                 <img src={item.imageUrl} alt="항목 캡처" className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 flex items-center justify-center transition">
-                                  <Maximize2 className="w-2.5 h-2.5 text-white"/>
+                                  <Maximize2 className="w-2.5 h-2.5 text-white" />
                                 </div>
                               </div>
                             )}
 
                             <button onClick={() => deleteItem(item.id)} className="text-gray-500 hover:text-red-600 p-1">
-                              <Trash2 className="w-4 h-4"/>
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
@@ -1336,21 +1333,21 @@ export default function WTAApp() {
                       onClick={() => setSelectedMemoryTripId(null)}
                       className="flex items-center gap-1 text-xs text-pink-600 font-bold self-start"
                     >
-                      <ChevronLeft className="w-4 h-4"/> 전체 추억 목록으로
+                      <ChevronLeft className="w-4 h-4" /> 전체 추억 목록으로
                     </button>
 
                     <button 
                       onClick={(e) => handleDeleteMemory(selectedMemoryTrip.id, e)}
                       className="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1 flex items-center gap-1"
                     >
-                      <Trash2 className="w-3.5 h-3.5"/> 추억 삭제
+                      <Trash2 className="w-3.5 h-3.5" /> 추억 삭제
                     </button>
                   </div>
 
                   <div className="border-2 border-gray-200 rounded-2xl p-4 bg-white shadow-sm flex flex-col gap-3">
                     <div className="flex justify-between items-center border-b border-gray-100 pb-2">
                       <span className="text-xs font-bold text-pink-600 flex items-center gap-1">
-                        <Heart className="w-3.5 h-3.5 fill-pink-600"/> {selectedMemoryTrip.type} 추억
+                        <Heart className="w-3.5 h-3.5 fill-pink-600" /> {selectedMemoryTrip.type} 추억
                       </span>
                       <span className="text-xs text-gray-500 font-medium">
                         {selectedMemoryTrip.startDate} ~ {selectedMemoryTrip.endDate}
@@ -1375,13 +1372,13 @@ export default function WTAApp() {
                                 onClick={() => setMemoryImgIdx(prev => (prev - 1 + selectedMemoryTrip.memoriesImages!.length) % selectedMemoryTrip.memoriesImages!.length)}
                                 className="absolute left-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"
                               >
-                                <ChevronLeft className="w-4 h-4"/>
+                                <ChevronLeft className="w-4 h-4" />
                               </button>
                               <button 
                                 onClick={() => setMemoryImgIdx(prev => (prev + 1) % selectedMemoryTrip.memoriesImages!.length)}
                                 className="absolute right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"
                               >
-                                <ChevronRightIcon className="w-4 h-4"/>
+                                <ChevronRightIcon className="w-4 h-4" />
                               </button>
                               <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
                                 {memoryImgIdx + 1} / {selectedMemoryTrip.memoriesImages.length}
@@ -1400,7 +1397,7 @@ export default function WTAApp() {
                       onClick={() => fileInputRefMemory.current?.click()}
                       className="w-full py-2 bg-pink-50 hover:bg-pink-100 border border-pink-300 text-pink-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-sm transition"
                     >
-                      <Camera className="w-3.5 h-3.5"/> 📸 추억 사진 추가하기 (여러 장 가능)
+                      <Camera className="w-3.5 h-3.5" /> 📸 추억 사진 추가하기 (여러 장 가능)
                     </button>
 
                     <div className="flex flex-col gap-1.5 mt-1">
@@ -1415,7 +1412,7 @@ export default function WTAApp() {
                           }}
                           className="text-[10px] text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-lg font-bold flex items-center gap-1 transition"
                         >
-                          <Sparkles className="w-3 h-3"/> 동선&체크리스트 기반 재생성
+                          <Sparkles className="w-3 h-3" /> 동선&체크리스트 기반 재생성
                         </button>
                       </div>
 
@@ -1464,7 +1461,7 @@ export default function WTAApp() {
                               className="text-gray-400 hover:text-red-500 p-1.5"
                               title="추억 삭제"
                             >
-                              <Trash2 className="w-4 h-4"/>
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
@@ -1489,7 +1486,7 @@ export default function WTAApp() {
                 onClick={() => setPreviewImage(null)}
                 className="absolute top-3 right-3 bg-black/60 text-white p-1.5 rounded-full z-10 hover:bg-black"
               >
-                <X className="w-5 h-5"/>
+                <X className="w-5 h-5" />
               </button>
               <img src={previewImage} alt="원본 이미지" className="w-full max-h-[70vh] object-contain rounded-xl" />
             </div>
@@ -1502,7 +1499,7 @@ export default function WTAApp() {
             <form onSubmit={handleCreateTrip} className="bg-white w-full rounded-2xl p-5 flex flex-col gap-3 shadow-xl border">
               <div className="flex justify-between items-center border-b border-gray-200 pb-2">
                 <h3 className="font-bold text-sm text-black">✨ 경완님 새 여행 만들기</h3>
-                <button type="button" onClick={() => setIsWizardOpen(false)}><X className="w-4 h-4 text-gray-500"/></button>
+                <button type="button" onClick={() => setIsWizardOpen(false)}><X className="w-4 h-4 text-gray-500" /></button>
               </div>
 
               <div className="flex flex-col gap-1">
@@ -1568,19 +1565,19 @@ export default function WTAApp() {
 
         <nav className="absolute bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-300 flex justify-around items-center z-20 shadow-md">
           <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center ${activeTab === 'home' ? 'text-blue-600 font-bold' : 'text-gray-700'}`}>
-            <Home className="w-5 h-5"/>
+            <Home className="w-5 h-5" />
             <span className="text-[10px] mt-1">홈</span>
           </button>
           <button onClick={() => setActiveTab('itinerary')} className={`flex flex-col items-center ${activeTab === 'itinerary' ? 'text-blue-600 font-bold' : 'text-gray-700'}`}>
-            <MapPin className="w-5 h-5"/>
+            <MapPin className="w-5 h-5" />
             <span className="text-[10px] mt-1">여정</span>
           </button>
           <button onClick={() => setActiveTab('checklist')} className={`flex flex-col items-center ${activeTab === 'checklist' ? 'text-blue-600 font-bold' : 'text-gray-700'}`}>
-            <CheckSquare className="w-5 h-5"/>
+            <CheckSquare className="w-5 h-5" />
             <span className="text-[10px] mt-1">체크리스트</span>
           </button>
           <button onClick={() => setActiveTab('past')} className={`flex flex-col items-center ${activeTab === 'past' ? 'text-pink-600 font-bold' : 'text-gray-700'}`}>
-            <Heart className="w-5 h-5"/>
+            <Heart className="w-5 h-5" />
             <span className="text-[10px] mt-1">추억</span>
           </button>
         </nav>
