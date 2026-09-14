@@ -1,12 +1,6 @@
-const CACHE_NAME = 'wta-icon-v4';
-const URLS_TO_CACHE = ['/', '/manifest.json', '/icon.png'];
+const CACHE_NAME = 'wta-app-cache-v10';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(URLS_TO_CACHE);
-    })
-  );
   self.skipWaiting();
 });
 
@@ -26,9 +20,5 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
-  );
+  // 최신 네트워크 우선 처리
 });
