@@ -496,12 +496,13 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
+  // 💡 추억 탭 전용 사진 업로드 수신부 (URL 확실 매칭 보환)
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !selectedMemoryTripId) return;
 
     setIsAnalyzing(true);
-    setAnalyzingMessage('☁️ 클라우드 업로드 및 추억 사진 저장 중...');
+    setAnalyzingMessage('☁️ 드라이브 업로드 및 추억 사진 저장 중...');
 
     try {
       const newImagesList: string[] = [];
@@ -514,26 +515,35 @@ export default function WTAApp() {
 
         const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
         const data = await res.json();
-        if (data.fileUrl) {
-          newImagesList.push(data.fileUrl);
+        
+        const validUrl = data.fileUrl || (data.extractedData && data.extractedData[0]?.imageUrl);
+        if (validUrl) {
+          newImagesList.push(validUrl);
         }
       }
 
-      const updatedMemories = memoryTrips.map(t => {
-        if (t.id === selectedMemoryTripId) {
-          const existingImgs = t.memoriesImages || [];
-          return { ...t, memoriesImages: [...existingImgs, ...newImagesList] };
-        }
-        return t;
-      });
+      if (newImagesList.length > 0) {
+        const updatedMemories = memoryTrips.map(t => {
+          if (t.id === selectedMemoryTripId) {
+            const existingImgs = t.memoriesImages || [];
+            return { ...t, memoriesImages: [...existingImgs, ...newImagesList] };
+          }
+          return t;
+        });
 
-      setMemoryTrips(updatedMemories);
-      setHasUnsavedChanges(true);
-      alert(`📸 ${newImagesList.length}장의 사진이 추가되었습니다.`);
+        setMemoryTrips(updatedMemories);
+        setHasUnsavedChanges(true);
+        alert(`📸 ${newImagesList.length}장의 추억 사진이 드라이브에 안전하게 보관되었습니다!`);
+      } else {
+        alert('사진 업로드 실패: 드라이브 업로드 URL을 생성하지 못했습니다.');
+      }
     } catch (err) {
       alert('사진 업로드 도중 에러가 발생했습니다.');
     } finally {
       setIsAnalyzing(false);
+      if (fileInputRefMemory.current) {
+        fileInputRefMemory.current.value = '';
+      }
     }
   };
 
@@ -1180,7 +1190,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 체크리스트 탭 (100% 수기 전용 안정화) */}
+          {/* 체크리스트 탭 */}
           {activeTab === 'checklist' && (
             <div className="flex flex-col gap-4">
               {selectedChecklistTripId ? (
@@ -1291,7 +1301,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 추억 탭 */}
+          {/* 추억 탭 (드라이브 전용 보완 완료) */}
           {activeTab === 'past' && (
             <div className="flex flex-col gap-4">
               {selectedMemoryTripId && selectedMemoryTrip ? (
