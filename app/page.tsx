@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Lock, CheckSquare, MapPin, Home, 
-  Plus, Trash2, Camera, Share2, X, RefreshCw, ChevronLeft, Calendar, Clock, Image as ImageIcon, ExternalLink, Maximize2, ListChecks, ChevronRight, Edit3, Heart, ChevronRight as ChevronRightIcon, Sparkles, Save, Settings
+  Plus, Trash2, Camera, X, RefreshCw, ChevronLeft, Calendar, Clock, Image as ImageIcon, ExternalLink, Maximize2, ListChecks, Edit3, Heart, ChevronRight as ChevronRightIcon, Sparkles, Save, Settings
 } from 'lucide-react';
 
 interface PlaceCard {
@@ -116,7 +116,6 @@ export default function WTAApp() {
   const [currentCalDate, setCurrentCalDate] = useState(new Date());
   const [selectedCalTrip, setSelectedCalTrip] = useState<{ trip: Trip; dateStr: string } | null>(null);
 
-  // 💡 4번 보완: 프로필 및 로그인 사진 고정 (재로딩/깜빡임 방지)
   const [wifePhoto, setWifePhoto] = useState<string>('/wife.jpg');
   const [loginBgPhoto, setLoginBgPhoto] = useState<string>('/login-bg.jpg');
 
@@ -161,19 +160,16 @@ export default function WTAApp() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadAllDataFromSheets(true);
+      loadAllDataFromSheets();
     }
   }, [isAuthenticated]);
 
-  const loadAllDataFromSheets = async (isInitial = false) => {
+  const loadAllDataFromSheets = async () => {
     setIsSyncing(true);
     try {
       await Promise.all([fetchChecklistFromSheets(), fetchTripsFromSheets()]);
-      if (!isInitial) {
-        alert('🔄 동기화가 완료되었습니다.');
-      }
     } catch (err) {
-      console.error('동기화 로드 오류:', err);
+      console.error('데이터 로드 오류:', err);
     } finally {
       setIsSyncing(false);
       setIsInitialLoading(false);
@@ -205,6 +201,7 @@ export default function WTAApp() {
     }
   };
 
+  // 💡 통합 저장하기: 앱의 모든 변경사항(여정+동선+체크리스트+추억)을 한 번에 저장
   const handleManualSave = async () => {
     setIsSyncing(true);
     try {
@@ -221,7 +218,6 @@ export default function WTAApp() {
       });
 
       setHasUnsavedChanges(false);
-      // 💡 1번 보완: 담백한 팝업 멘트
       alert('💾 저장 완료');
     } catch (err) {
       alert('저장 중 오류가 발생했습니다.');
@@ -473,7 +469,6 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  // 💡 3번 보완: 추억 사진 업로드 시 상단 업로드 중 띠 표시
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !selectedMemoryTripId) return;
@@ -507,7 +502,6 @@ export default function WTAApp() {
 
       setMemoryTrips(updatedMemories);
       setHasUnsavedChanges(true);
-      // 💡 1번 보완: 담백한 팝업 멘트
       alert(`📸 ${newImagesList.length}장의 사진이 추가되었습니다.`);
     } catch (err) {
       alert('사진 업로드 도중 에러가 발생했습니다.');
@@ -534,7 +528,6 @@ export default function WTAApp() {
     if (!file || !selectedChecklistTripId) return;
 
     setIsAnalyzing(true);
-    // 💡 2번 보완: "구글" 지우고 "☁️ 클라우드 업로드 및 캡처 인식 중..."
     setAnalyzingMessage('☁️ 클라우드 업로드 및 캡처 인식 중...');
     try {
       const compressedFile = await compressFileBeforeUpload(file);
@@ -559,7 +552,6 @@ export default function WTAApp() {
         const updated = [...checklists, ...newItems];
         setChecklists(updated);
         setHasUnsavedChanges(true);
-        // 💡 1번 보완: 담백한 팝업 멘트
         alert(`🎉 준비물 ${newItems.length}개가 추출되었습니다.`);
       } else {
         alert('이미지에서 준비물 항목을 추출하지 못했습니다.');
@@ -576,7 +568,6 @@ export default function WTAApp() {
     if (!file || !targetCardId) return;
 
     setIsAnalyzing(true);
-    // 💡 2번 보완: "구글" 지우고 "☁️ 클라우드 업로드 및 캡처 인식 중..."
     setAnalyzingMessage('☁️ 클라우드 업로드 및 캡처 인식 중...');
     try {
       const compressedFile = await compressFileBeforeUpload(file);
@@ -740,23 +731,14 @@ export default function WTAApp() {
           className="hidden" 
         />
 
+        {/* 💡 헤더: 동기화 버튼 제거 및 1개의 통합 저장하기 버튼만 우측 배치 */}
         <header className="p-4 border-b border-gray-300 flex justify-between items-center bg-white sticky top-0 z-10 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-blue-600">WTA <span className="text-xs text-gray-700 font-medium">for 경완님</span></h1>
-            <button 
-              onClick={() => loadAllDataFromSheets(false)}
-              className="p-1.5 bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg flex items-center gap-1 text-xs font-bold transition border"
-              title="데이터 불러오기"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-600' : ''}`} />
-              <span>동기화</span>
-            </button>
-          </div>
+          <h1 className="text-xl font-bold text-blue-600">WTA <span className="text-xs text-gray-700 font-medium">for 경완님</span></h1>
           
           <button 
             onClick={handleManualSave}
             disabled={isSyncing}
-            className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-xl font-bold transition shadow ${
+            className={`flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-xl font-bold transition shadow ${
               hasUnsavedChanges 
                 ? 'bg-blue-600 text-white animate-pulse' 
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
@@ -767,7 +749,6 @@ export default function WTAApp() {
           </button>
         </header>
 
-        {/* 💡 2번 & 3번 보완: "구글" 문구 삭제 및 클라우드 업로드 공용 상태바 표기 */}
         {isAnalyzing && (
           <div className="bg-purple-600 text-white text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-2 flex-shrink-0">
             <RefreshCw className="w-4 h-4 animate-spin" /> {analyzingMessage}
@@ -779,7 +760,6 @@ export default function WTAApp() {
           {activeTab === 'home' && (
             <div className="flex flex-col gap-4">
               
-              {/* 💡 4번 보완: 프로필 로딩 없이 고정유지 */}
               <div className="p-3.5 border-2 border-pink-200 bg-pink-50/60 rounded-2xl flex items-center gap-3 shadow-sm relative">
                 <div 
                   onClick={() => fileInputRefWife.current?.click()}
@@ -862,7 +842,7 @@ export default function WTAApp() {
                       <ChevronLeft className="w-4 h-4" />
                     </button>
                     <button onClick={nextMonth} className="p-1 rounded-lg hover:bg-gray-100 text-gray-600">
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRightIcon className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
