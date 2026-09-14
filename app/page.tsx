@@ -64,8 +64,8 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
-// 💡 모바일 고화질 이미지 자동 압축 함수
-const compressImage = (file: File, maxWidth = 1000, quality = 0.7): Promise<string> => {
+// 💡 413 Payload Too Large 방지를 위한 모바일 이미지 초경량 압축 (최대 너비 800px, 용량 90% 이상 축소)
+const compressImageToSmallSize = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -74,6 +74,7 @@ const compressImage = (file: File, maxWidth = 1000, quality = 0.7): Promise<stri
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement('canvas');
+        const maxWidth = 800;
         let width = img.width;
         let height = img.height;
 
@@ -87,12 +88,13 @@ const compressImage = (file: File, maxWidth = 1000, quality = 0.7): Promise<stri
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
 
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        // JPEG 60% 품질로 용량을 약 200KB~400KB로 획기적으로 축소
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
         resolve(compressedDataUrl);
       };
-      img.onerror = (error) => reject(error);
+      img.onerror = (err) => reject(err);
     };
-    reader.onerror = (error) => reject(error);
+    reader.onerror = (err) => reject(err);
   });
 };
 
@@ -406,11 +408,11 @@ export default function WTAApp() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressed = await compressImage(file, 400, 0.8);
+        const compressed = await compressImageToSmallSize(file);
         setWifePhoto(compressed);
         localStorage.setItem('wta_wife_photo', compressed);
       } catch (err) {
-        console.error('프로필 사진 처리 에러:', err);
+        console.error('프로필 사진 에러:', err);
       }
     }
   };
@@ -419,11 +421,11 @@ export default function WTAApp() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressed = await compressImage(file, 800, 0.7);
+        const compressed = await compressImageToSmallSize(file);
         setLoginBgPhoto(compressed);
         localStorage.setItem('wta_login_bg', compressed);
       } catch (err) {
-        console.error('배경 사진 처리 에러:', err);
+        console.error('배경 사진 에러:', err);
       }
     }
   };
@@ -450,15 +452,15 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  // 🔥 추억 탭 사진 자동 용량 압축 및 영구 업로드 처리
+  // 🔥 413 에러 방지 추억 사진 즉시 압축 및 등록
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedMemoryTripId) return;
 
     try {
       setIsSyncing(true);
-      // 고화질 사진을 적정 해상도로 자동 압축하여 용량 축소
-      const compressedImage = await compressImage(file, 1000, 0.75);
+      // 브라우저에서 용량을 300KB 수준으로 강력 축소
+      const compressedImage = await compressImageToSmallSize(file);
 
       const updatedMemories = memoryTrips.map(t => {
         if (t.id === selectedMemoryTripId) {
@@ -470,9 +472,9 @@ export default function WTAApp() {
 
       setMemoryTrips(updatedMemories);
       setHasUnsavedChanges(true);
-      alert('📸 추억 사진이 추가되었습니다!\n상단 [💾 저장하기] 버튼을 누르면 구글 시트에 최종 저장됩니다.');
+      alert('📸 추억 사진이 추가되었습니다!\n상단 [💾 저장하기] 버튼을 누르시면 안전하게 동기화 저장됩니다.');
     } catch (err) {
-      alert('사진을 처리하는 도중 오류가 발생했습니다.');
+      alert('사진을 추가하는 도중 오류가 발생했습니다.');
     } finally {
       setIsSyncing(false);
     }
@@ -495,18 +497,24 @@ export default function WTAApp() {
     const file = e.target.files?.[0];
     if (!file || !selectedChecklistTripId) return;
 
-    const localImgUrl = URL.createObjectURL(file);
-
     setIsAnalyzing(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('mode', 'checklist');
-
     try {
-      const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
-      const data = await res.json();
+      // 413 에러 방지를 위해 미리 압축된 데이터 생성 후 전송
+      const compressedImage = await compressImageToSmallSize(file);
+      
+      // Data URL을 Blob 파일로 변환
+      const res = await fetch(compressedImage);
+      const blob = await res.blob();
+      const smallFile = new File([blob], file.name, { type: 'image/jpeg' });
 
-      const driveImgUrl = data.fileUrl || localImgUrl;
+      const formData = new FormData();
+      formData.append('file', smallFile);
+      formData.append('mode', 'checklist');
+
+      const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
+      const data = await apiRes.json();
+
+      const driveImgUrl = data.fileUrl || compressedImage;
 
       if (data.extractedData && data.extractedData.length > 0) {
         const newItems: ChecklistItem[] = data.extractedData.map((item: any, idx: number) => ({
@@ -520,7 +528,7 @@ export default function WTAApp() {
         const updated = [...checklists, ...newItems];
         setChecklists(updated);
         setHasUnsavedChanges(true);
-        alert(`🎉 캡처에서 ${newItems.length}개의 준비물을 자동으로 추출하여 추가했습니다!\n상단 [💾 저장하기] 버튼을 누르면 완전히 저장됩니다.`);
+        alert(`🎉 캡처에서 ${newItems.length}개의 준비물을 추출했습니다!\n상단 [💾 저장하기] 버튼을 누르면 완전히 저장됩니다.`);
       } else {
         alert('이미지에서 준비물 항목을 추출하지 못했습니다.');
       }
@@ -535,17 +543,21 @@ export default function WTAApp() {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
 
-    const localImgUrl = URL.createObjectURL(file);
-    handlePlaceCardChange(targetCardId, 'imageUrl', localImgUrl);
-
     setIsAnalyzing(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('mode', 'place');
-
     try {
-      const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
-      const data = await res.json();
+      const compressedImage = await compressImageToSmallSize(file);
+      handlePlaceCardChange(targetCardId, 'imageUrl', compressedImage);
+
+      const res = await fetch(compressedImage);
+      const blob = await res.blob();
+      const smallFile = new File([blob], file.name, { type: 'image/jpeg' });
+
+      const formData = new FormData();
+      formData.append('file', smallFile);
+      formData.append('mode', 'place');
+
+      const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
+      const data = await apiRes.json();
 
       if (data.fileUrl) {
         handlePlaceCardChange(targetCardId, 'imageUrl', data.fileUrl);
@@ -609,12 +621,10 @@ export default function WTAApp() {
 
   const filteredChecklists = checklists.filter(item => item.tripId === selectedChecklistTripId || (!item.tripId && selectedChecklistTripId === trips[0]?.id));
 
-  // 최초 로그인 메인 화면
   if (!isAuthenticated) {
     return (
       <div className="flex justify-center bg-gray-100 min-h-screen">
         <main className="w-full max-w-md bg-white min-h-screen flex flex-col justify-center items-center p-6 shadow-md relative overflow-hidden">
-          
           <div 
             className="absolute inset-0 bg-cover bg-center transition-all duration-500"
             style={{ backgroundImage: `url(${loginBgPhoto})` }}
