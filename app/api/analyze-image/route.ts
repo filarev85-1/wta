@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -17,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드
+    // 1. 구글 드라이브 업로드 (체크리스트, 여정 카드, 추억, 프로필 공통)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -62,53 +60,39 @@ export async function POST(req: NextRequest) {
               supportsAllDrives: true,
             });
           } catch (permErr) {
-            // 권한 부여 관련 단순 경고 무시
+            // 권한 부여 경고 무시
           }
           fileUrl = `https://drive.google.com/uc?id=${fileId}`;
         }
       }
     } catch (driveErr: any) {
-      // 불필요한 서비스 계정 Quota 경고 메시지로 인한 혼선 방지 (필요시 내부 기록)
+      // 드라이브 예외 처리
     }
 
-    // 2. Gemini AI 분석 (여정 상세카드 'place' 모드 전용)
+    // 💡 2. 오직 여정 상세카드('place') 모드에서만 Gemini AI 분석 수행 (타임아웃 대기 제거)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (apiKey && mode === 'place') {
-      const genAI = new GoogleGenerativeAI(apiKey);
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const imagePart = {
+          inlineData: {
+            data: buffer.toString('base64'),
+            mimeType: file.type || 'image/jpeg',
+          },
+        };
 
-      const imagePart = {
-        inlineData: {
-          data: buffer.toString('base64'),
-          mimeType: file.type || 'image/jpeg',
-        },
-      };
-
-      const prompt = `이 이미지를 분석해줘.
+        const prompt = `이 이미지를 분석해줘.
 1. 지도/인스타그램/영수증 캡처라면 상호명(name), 주소(address), 팁(tip)을 추출해.
 2. 만약 일반 장소/음식 사진이라면 시각적인 특징을 통해 예상 장소나 대표 메뉴명을 상호명으로 유추해.
 반드시 마크다운 글자 없이 아래 형태의 순수 JSON 배열만 반환해:
 [{"name": "속초 물회 맛집", "address": "강원 속초시", "tip": "시원한 물회 추천"}]`;
 
-      const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+        const result = await model.generateContent([prompt, imagePart]);
+        const aiResponseText = result.response.text();
 
-      const fetchAIWithRetry = async (retryCount = 0): Promise<string> => {
-        try {
-          const result = await model.generateContent([prompt, imagePart]);
-          return result.response.text();
-        } catch (err: any) {
-          if (err?.status === 429 && retryCount < 2) {
-            const waitTime = (retryCount + 1) * 2000;
-            await delay(waitTime);
-            return fetchAIWithRetry(retryCount + 1);
-          }
-          throw err;
-        }
-      };
-
-      try {
-        const aiResponseText = await fetchAIWithRetry();
         if (aiResponseText) {
           const firstBracket = aiResponseText.indexOf('[');
           const lastBracket = aiResponseText.lastIndexOf(']');
@@ -118,7 +102,7 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (aiErr: any) {
-        // AI 429 에러 발생 시 우회 로그
+        // AI 처리 중 429 등 오류가 나더라도 무반응 멈춤 없이 드라이브 fileUrl만 즉시 반환
       }
     }
 
