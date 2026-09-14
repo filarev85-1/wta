@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// 💡 429 대기 처리용 딜레이 함수
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function POST(req: NextRequest) {
@@ -18,7 +17,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 (v1.0.8 스토리지 안정성 유지)
+    // 1. 구글 드라이브 업로드 (서비스 계정 Quota 우회)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -51,6 +50,7 @@ export async function POST(req: NextRequest) {
           },
           fields: 'id, webViewLink, webContentLink',
           supportsAllDrives: true,
+          supportsTeamDrives: true,
         });
 
         const fileId = response.data.id;
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       console.error('Drive upload warning:', driveErr?.message || driveErr);
     }
 
-    // 2. AI 분석 - 429 쿼터 초과 시 1회 자동 재시도 로직
+    // 2. Gemini AI 분석 (429 에러 2회 지수 백오프 자동 재시도)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -103,23 +103,22 @@ export async function POST(req: NextRequest) {
 
       const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
-      // AI 호출 함수 (429 에러 대응)
-      const fetchAI = async (retryCount = 0): Promise<string> => {
+      const fetchAIWithRetry = async (retryCount = 0): Promise<string> => {
         try {
           const result = await model.generateContent([prompt, imagePart]);
           return result.response.text();
         } catch (err: any) {
-          // 429 Too Many Requests 발생 시 1.5초 후 1회 재시도
-          if (err?.status === 429 && retryCount < 1) {
-            await delay(1500);
-            return fetchAI(retryCount + 1);
+          if (err?.status === 429 && retryCount < 2) {
+            const waitTime = (retryCount + 1) * 2000;
+            await delay(waitTime);
+            return fetchAIWithRetry(retryCount + 1);
           }
           throw err;
         }
       };
 
       try {
-        const aiResponseText = await fetchAI();
+        const aiResponseText = await fetchAIWithRetry();
         if (aiResponseText) {
           const firstBracket = aiResponseText.indexOf('[');
           const lastBracket = aiResponseText.lastIndexOf(']');
@@ -129,11 +128,10 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (aiErr: any) {
-        console.error('Gemini API 분석 우회 처리:', aiErr?.message || aiErr);
+        console.error('Gemini API 분석 우회 안전 처리 완료:', aiErr?.message || aiErr);
       }
     }
 
-    // AI 분석이 쿼터 초과로 실패하더라도 드라이브에 올라간 사진 URL은 정상 전달하여 카드에 사진이 남도록 보장
     return NextResponse.json({
       success: true,
       fileUrl,
