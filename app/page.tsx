@@ -108,6 +108,7 @@ export default function WTAApp() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
   const [memoryImgIdx, setMemoryImgIdx] = useState<number>(0);
   const fileInputRefChecklist = useRef<HTMLInputElement>(null);
@@ -131,6 +132,7 @@ export default function WTAApp() {
       console.error('동기화 로드 오류:', err);
     } finally {
       setIsSyncing(false);
+      setIsInitialLoading(false);
     }
   };
 
@@ -422,7 +424,6 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  // 🔥 추억 탭 구글 드라이브 업로드 및 URL 저장
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !selectedMemoryTripId) return;
@@ -474,7 +475,6 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
-  // 🔥 체크리스트 구글 드라이브 업로드 & Gemini AI 파싱
   const handleAnalyzeChecklistImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedChecklistTripId) return;
@@ -513,7 +513,6 @@ export default function WTAApp() {
     }
   };
 
-  // 🔥 동선 카드 구글 드라이브 업로드 & 상호/주소 파싱
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
@@ -757,7 +756,7 @@ export default function WTAApp() {
                 </div>
               ) : (
                 <div className="p-4 bg-blue-50 border-2 border-dashed border-blue-300 rounded-2xl text-center text-xs font-bold text-blue-700">
-                  등록된 예정 여정이 없습니다. 아래 버튼을 눌러 여정을 만들어 보세요!
+                  {isInitialLoading ? '구글 시트에서 여정을 불러오는 중입니다...' : '등록된 예정 여정이 없습니다. 아래 버튼을 눌러 여정을 만들어 보세요!'}
                 </div>
               )}
 
@@ -1131,7 +1130,7 @@ export default function WTAApp() {
                       ))
                     ) : (
                       <div className="p-8 text-center text-xs text-gray-500 border-2 border-dashed rounded-2xl font-medium">
-                        등록된 여정이 없습니다. 상단 '동기화' 버튼을 누르면 구글 시트 데이터가 나타납니다!
+                        {isInitialLoading ? '구글 시트 데이터를 로딩 중입니다...' : '등록된 여정이 없습니다. 새 여정을 만들어 보세요!'}
                       </div>
                     )}
                   </div>
