@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 시도 (드라이브 Quota 제한 시 안전 예외 처리 후 AI 분석 보장)
+    // 1. 구글 드라이브 업로드 시도 (드라이브 Quota 이슈 시 안전 무시)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       console.error('Drive upload skipped (Proceeding to AI Analysis)');
     }
 
-    // 2. Gemini AI 멀티모달 분석 (모델 폴백 안전 구조 적용)
+    // 2. Gemini AI 스마트 시각 유추 (현재 유효한 최신 gemini-2.5-flash / gemini-flash-latest 적용)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -98,8 +98,8 @@ export async function POST(req: NextRequest) {
 [{"name": "속초 물회 맛집", "address": "강원 속초시", "tip": "시원한 물회 추천"}]`;
       }
 
-      // 💡 요청 후보 모델 리스트 (1차 실패 시 2차, 3차로 자동 폴백)
-      const candidateModels = ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'];
+      // 💡 현재 시점 정식 활성화된 모델 우선순위 배열
+      const candidateModels = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-pro'];
       let aiResponseText = '';
 
       for (const modelName of candidateModels) {
@@ -107,9 +107,9 @@ export async function POST(req: NextRequest) {
           const model = genAI.getGenerativeModel({ model: modelName });
           const result = await model.generateContent([prompt, imagePart]);
           aiResponseText = result.response.text();
-          if (aiResponseText) break; // 성공 시 반복문 탈출
+          if (aiResponseText) break;
         } catch (modelErr) {
-          console.warn(`Model ${modelName} failed, trying next candidate...`);
+          console.warn(`Model ${modelName} failed, trying next...`);
         }
       }
 
