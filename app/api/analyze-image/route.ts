@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 공유 폴더로 직접 업로드
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -37,7 +36,6 @@ export async function POST(req: NextRequest) {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(buffer);
 
-        // 부모 폴더 ID 지정하여 파일 생성
         const response = await drive.files.create({
           requestBody: {
             name: `WTA_${Date.now()}_${file.name}`,
@@ -53,7 +51,6 @@ export async function POST(req: NextRequest) {
 
         const fileId = response.data.id;
         if (fileId) {
-          // 공유 권한 부여 (누구나 조회 가능)
           await drive.permissions.create({
             fileId: fileId,
             requestBody: {
@@ -67,10 +64,9 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (driveErr) {
-      console.error('구글 드라이브 업로드 오류 상세:', driveErr);
+      console.error('Drive upload error:', driveErr);
     }
 
-    // 2. Gemini AI를 활용한 이미지 분석
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -87,20 +83,24 @@ export async function POST(req: NextRequest) {
         };
 
         if (mode === 'checklist') {
-          const prompt = `이 이미지에 있는 여행 준비물, 짐싸기 목록, 텍스트들을 추출해줘. JSON 배열 형태로 출력해줘. 예: [{"category": "음식/식재료", "title": "삼겹살"}, {"category": "캠핑장비", "title": "랜턴"}]`;
+          const prompt = `이 이미지에 있는 여행 준비물 목록을 추출해서 JSON 배열로만 반환해줘. 마크다운이나 다른 설명 금지. 예시: [{"category": "음식/식재료", "title": "삼겹살"}]`;
           const result = await model.generateContent([prompt, imagePart]);
           const text = result.response.text();
-          const cleanJson = text.replace(/```json|```/g, '').trim();
-          extractedData = JSON.parse(cleanJson);
+          const jsonMatch = text.match(/\[.*\]/s);
+          if (jsonMatch) {
+            extractedData = JSON.parse(jsonMatch[0]);
+          }
         } else if (mode === 'place') {
-          const prompt = `이 이미지에 있는 여행 장소, 상호명, 주소, 팁 정보나 텍스트를 추출해줘. JSON 배열 형태로 출력해줘. 예: [{"name": "아침고요수목원", "address": "경기 가평군...", "tip": "유모차 추천"}]`;
+          const prompt = `이 이미지에 있는 여행 장소명, 주소, 팁을 추출해서 JSON 배열로만 반환해줘. 마크다운이나 다른 설명 금지. 예시: [{"name": "속초해수욕장", "address": "강원 속초시 조양동", "tip": "주차장 넓음"}]`;
           const result = await model.generateContent([prompt, imagePart]);
           const text = result.response.text();
-          const cleanJson = text.replace(/```json|```/g, '').trim();
-          extractedData = JSON.parse(cleanJson);
+          const jsonMatch = text.match(/\[.*\]/s);
+          if (jsonMatch) {
+            extractedData = JSON.parse(jsonMatch[0]);
+          }
         }
       } catch (aiErr) {
-        console.error('Gemini AI 분석 에러:', aiErr);
+        console.error('Gemini AI 파싱 에러:', aiErr);
       }
     }
 
