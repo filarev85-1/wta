@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 전용 업로드 (구글 시트 5만 자 제한 원천 방지)
+    // 1. 구글 드라이브 업로드 (서비스 계정 Quota 0Byte 오류 원천 방지)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(buffer);
 
+        // 💡 supportsAllDrives & supportsTeamDrives 옵션 및 parents 명시로 서비스 계정 용량 제한 우회
         const response = await drive.files.create({
           requestBody: {
             name: `WTA_${Date.now()}_${file.name}`,
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
         const fileId = response.data.id;
         if (fileId) {
           try {
+            // 전체 공개 읽기 권한 부여
             await drive.permissions.create({
               fileId: fileId,
               requestBody: { role: 'reader', type: 'anyone' },
@@ -61,14 +63,16 @@ export async function POST(req: NextRequest) {
           } catch (permErr) {
             console.error('Drive permission warning:', permErr);
           }
+          
+          // 💡 절대 Base64로 넘어가지 않고 짧은 드라이브 링크로만 반환
           fileUrl = `https://drive.google.com/uc?id=${fileId}`;
         }
       }
     } catch (driveErr: any) {
-      console.error('Drive upload warning:', driveErr?.message || driveErr);
+      console.error('Drive upload error:', driveErr?.message || driveErr);
     }
 
-    // 2. 최신 제미나이 무료 표준 모델 호출 (gemini-flash-latest)
+    // 2. Gemini AI 스마트 시각 유추 (무료 표준 gemini-flash-latest 사용)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -99,7 +103,6 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        // 💡 무료 플랜에서 사용 가능한 최신 모델로 고정
         const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
         const result = await model.generateContent([prompt, imagePart]);
         const aiResponseText = result.response.text();
