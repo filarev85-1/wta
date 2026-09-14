@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 (서비스 계정 Quota 우회)
+    // 1. 구글 드라이브 전용 업로드 (체크리스트, 추억, 배경, 프로필 사진 공통)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -71,11 +71,11 @@ export async function POST(req: NextRequest) {
       console.error('Drive upload warning:', driveErr?.message || driveErr);
     }
 
-    // 2. Gemini AI 분석 (429 에러 2회 지수 백오프 자동 재시도)
+    // 2. Gemini AI 분석 (오직 여정 상세카드 'place' 모드에서만 동작)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
-    if (apiKey && (mode === 'checklist' || mode === 'place')) {
+    if (apiKey && mode === 'place') {
       const genAI = new GoogleGenerativeAI(apiKey);
 
       const imagePart = {
@@ -85,21 +85,11 @@ export async function POST(req: NextRequest) {
         },
       };
 
-      let prompt = '';
-      if (mode === 'checklist') {
-        prompt = `이 이미지를 분석해줘. 
-1. 글자/텍스트가 있다면 짐싸기 목록이나 장보기 항목을 추출해.
-2. 만약 글자가 없는 음식, 물건, 장비 사진이라면 시각적으로 보이는 대상의 이름을 유추해서 체크리스트 품목으로 만들어.
-카테고리는 무조건 [음식/식재료, 아이용품, 캠핑장비, 의류/세면, 중요사항, 기타] 중 하나로 지정해줘.
-반드시 마크다운 글자 없이 아래 형태의 순수 JSON 배열만 반환해:
-[{"category": "음식/식재료", "title": "물회"}]`;
-      } else if (mode === 'place') {
-        prompt = `이 이미지를 분석해줘.
+      const prompt = `이 이미지를 분석해줘.
 1. 지도/인스타그램/영수증 캡처라면 상호명(name), 주소(address), 팁(tip)을 추출해.
 2. 만약 일반 장소/음식 사진이라면 시각적인 특징을 통해 예상 장소나 대표 메뉴명을 상호명으로 유추해.
 반드시 마크다운 글자 없이 아래 형태의 순수 JSON 배열만 반환해:
 [{"name": "속초 물회 맛집", "address": "강원 속초시", "tip": "시원한 물회 추천"}]`;
-      }
 
       const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
