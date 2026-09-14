@@ -1,19 +1,16 @@
-// app/api/sheets/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 
 function getGoogleSheetsClient() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  let privateKey = process.env.GOOGLE_PRIVATE_KEY;
+  let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
+  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
 
-  if (!email || !privateKey) {
-    throw new Error('Google Service Account environment variables are missing');
+  if (!email || !privateKey || !spreadsheetId) {
+    throw new Error('Google Sheets 환경 변수가 설정되지 않았습니다.');
   }
 
   privateKey = privateKey.replace(/\\n/g, '\n');
-  if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-    privateKey = privateKey.substring(1, privateKey.length - 1);
-  }
 
   const auth = new google.auth.JWT({
     email,
@@ -21,131 +18,71 @@ function getGoogleSheetsClient() {
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 
-  return google.sheets({ version: 'v4', auth });
+  const sheets = google.sheets({ version: 'v4', auth });
+  return { sheets, spreadsheetId };
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const sheets = getGoogleSheetsClient();
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-    const { searchParams } = new URL(req.url);
-    const type = searchParams.get('type');
+    const { sheets, spreadsheetId } = getGoogleSheetsClient();
+    const url = new URL(req.url);
+    const dataType = url.searchParams.get('type');
 
-    if (type === 'trips') {
+    if (dataType === 'trips') {
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: 'Trips!A2:G100',
+        range: 'Sheet1!B1',
       });
 
-      const rows = response.data.values || [];
-      const trips = rows.map((row) => {
-        let parsedPlaces = [];
-        if (row[5]) {
-          try {
-            parsedPlaces = typeof row[5] === 'string' ? JSON.parse(row[5]) : row[5];
-          } catch (e) {
-            console.error('places JSON parse error:', e);
-            parsedPlaces = [];
-          }
-        }
-        return {
-          id: row[0] || '',
-          title: row[1] || '',
-          startDate: row[2] || '',
-          endDate: row[3] || '',
-          type: row[4] || '🏕️ 캠핑',
-          places: Array.isArray(parsedPlaces) ? parsedPlaces : [],
-          review: row[6] || '',
-        };
-      });
-
+      const rawData = response.data.values?.[0]?.[0];
+      const trips = rawData ? JSON.parse(rawData) : [];
       return NextResponse.json({ trips });
     } else {
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: 'Checklist!A2:F100',
+        range: 'Sheet1!A1',
       });
 
-      const rows = response.data.values || [];
-      const checklists = rows.map((row) => ({
-        id: Number(row[0]),
-        tripId: row[1] || undefined,
-        category: row[2] || '음식/식재료',
-        title: row[3] || '',
-        completed: row[4] === 'TRUE' || row[4] === 'true',
-        imageUrl: row[5] || undefined,
-      }));
-
+      const rawData = response.data.values?.[0]?.[0];
+      const checklists = rawData ? JSON.parse(rawData) : [];
       return NextResponse.json({ checklists });
     }
   } catch (err: any) {
-    console.error('Sheets GET error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('Sheets GET 에러:', err);
+    return NextResponse.json({ error: err.message || '시트 읽기 실패' }, { status: 500 });
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const sheets = getGoogleSheetsClient();
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+    const { sheets, spreadsheetId } = getGoogleSheetsClient();
     const body = await req.json();
 
     if (body.type === 'trips') {
-      const trips = body.trips || [];
-      const rows = trips.map((t: any) => [
-        t.id,
-        t.title,
-        t.startDate,
-        t.endDate,
-        t.type,
-        JSON.stringify(t.places || []),
-        t.review || '',
-      ]);
-
-      await sheets.spreadsheets.values.clear({
+      const tripsJson = JSON.stringify(body.trips || []);
+      await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: 'Trips!A2:G100',
+        range: 'Sheet1!B1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [[tripsJson]],
+        },
       });
-
-      if (rows.length > 0) {
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: 'Trips!A2',
-          valueInputOption: 'USER_ENTERED',
-          requestBody: { values: rows },
-        });
-      }
-
-      return NextResponse.json({ success: true, count: rows.length });
+      return NextResponse.json({ success: true, message: '여정 저장 완료' });
     } else {
-      const checklists = body.checklists || [];
-      const rows = checklists.map((c: any) => [
-        c.id,
-        c.tripId || '',
-        c.category || '기타',
-        c.title,
-        c.completed ? 'TRUE' : 'FALSE',
-        c.imageUrl || '',
-      ]);
-
-      await sheets.spreadsheets.values.clear({
+      const checklistJson = JSON.stringify(body.checklists || []);
+      await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: 'Checklist!A2:F100',
+        range: 'Sheet1!A1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [[checklistJson]],
+        },
       });
-
-      if (rows.length > 0) {
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: 'Checklist!A2',
-          valueInputOption: 'USER_ENTERED',
-          requestBody: { values: rows },
-        });
-      }
-
-      return NextResponse.json({ success: true, count: rows.length });
+      return NextResponse.json({ success: true, message: '체크리스트 저장 완료' });
     }
   } catch (err: any) {
-    console.error('Sheets POST error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('Sheets POST 에러:', err);
+    return NextResponse.json({ error: err.message || '시트 저장 실패' }, { status: 500 });
   }
 }
