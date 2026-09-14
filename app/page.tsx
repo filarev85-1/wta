@@ -6,8 +6,8 @@ import {
   Plus, Trash2, Camera, X, RefreshCw, ChevronLeft, Calendar, Clock, Image as ImageIcon, ExternalLink, Maximize2, ListChecks, Edit3, Heart, ChevronRight as ChevronRightIcon, Sparkles, Save, Settings
 } from 'lucide-react';
 
-// 💡 버전 자동 업데이트: v1.0.7
-const APP_VERSION = 'v1.0.9';
+// 💡 지정 순차 버저닝: v1.1.0
+const APP_VERSION = 'v1.1.0';
 
 interface PlaceCard {
   id: string;
@@ -147,9 +147,11 @@ export default function WTAApp() {
   const [checklists, setChecklists] = useState<ChecklistItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('음식/식재료');
+  const [pendingChecklistImgUrl, setPendingChecklistImgUrl] = useState<string | null>(null);
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analyzingMessage, setAnalyzingMessage] = useState('☁️ 클라우드 업로드 및 캡처 인식 중...');
+  const [analyzingMessage, setAnalyzingMessage] = useState('☁️ 클라우드 업로드 중...');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
@@ -219,7 +221,6 @@ export default function WTAApp() {
     }
   };
 
-  // 💡 Checklist, Trips, Remember 3개 탭 각각 시트에 분리 저장
   const handleManualSave = async () => {
     setIsSyncing(true);
     try {
@@ -267,9 +268,17 @@ export default function WTAApp() {
 
   const addItem = () => {
     if (!newItemText.trim() || !selectedChecklistTripId) return;
-    const updated = [...checklists, { id: Date.now(), tripId: selectedChecklistTripId, category: selectedCategory, title: newItemText, completed: false }];
+    const updated = [...checklists, { 
+      id: Date.now(), 
+      tripId: selectedChecklistTripId, 
+      category: selectedCategory, 
+      title: newItemText, 
+      completed: false,
+      imageUrl: pendingChecklistImgUrl || undefined
+    }];
     setChecklists(updated);
     setNewItemText('');
+    setPendingChecklistImgUrl(null);
     setHasUnsavedChanges(true);
   };
 
@@ -547,12 +556,13 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
-  const handleAnalyzeChecklistImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 💡 체크리스트 업로드: 단순 사진 첨부로 정비
+  const handleChecklistPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedChecklistTripId) return;
+    if (!file) return;
 
     setIsAnalyzing(true);
-    setAnalyzingMessage('☁️ 클라우드 업로드 및 캡처 인식 중...');
+    setAnalyzingMessage('☁️ 드라이브 사진 업로드 중...');
     try {
       const compressedFile = await compressFileBeforeUpload(file);
       const formData = new FormData();
@@ -562,31 +572,18 @@ export default function WTAApp() {
       const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
       const data = await apiRes.json();
 
-      const driveImgUrl = data.fileUrl || '';
-
-      if (data.extractedData && Array.isArray(data.extractedData) && data.extractedData.length > 0) {
-        const newItems: ChecklistItem[] = data.extractedData.map((item: any, idx: number) => ({
-          id: Date.now() + idx,
-          tripId: selectedChecklistTripId,
-          category: item.category || '음식/식재료',
-          title: item.title,
-          completed: false,
-          imageUrl: driveImgUrl,
-        }));
-        const updated = [...checklists, ...newItems];
-        setChecklists(updated);
-        setHasUnsavedChanges(true);
-        alert(`🎉 준비물 ${newItems.length}개가 추출되었습니다.`);
-      } else {
-        alert('이미지에서 준비물 항목을 추출하지 못했습니다.');
+      if (data.fileUrl) {
+        setPendingChecklistImgUrl(data.fileUrl);
+        alert('📸 사진이 등록되었습니다. 준비물 입력 후 [추가] 버튼을 눌러주세요.');
       }
     } catch (err) {
-      alert('이미지 분석 중 오류가 발생했습니다.');
+      alert('사진 업로드 중 오류가 발생했습니다.');
     } finally {
       setIsAnalyzing(false);
     }
   };
 
+  // 💡 여정 상세카드 캡처 고정 유지 로직
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
@@ -729,7 +726,7 @@ export default function WTAApp() {
           type="file" 
           accept="image/*" 
           ref={fileInputRefChecklist} 
-          onChange={handleAnalyzeChecklistImage} 
+          onChange={handleChecklistPhotoUpload} 
           className="hidden" 
         />
         <input 
@@ -976,7 +973,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 여정 탭 */}
+          {/* 여정 탭 (기존 정상 확인 코드 유지) */}
           {activeTab === 'itinerary' && (
             <div className="flex flex-col gap-4">
               {selectedTripId && selectedTrip ? (
@@ -1223,7 +1220,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 체크리스트 탭 */}
+          {/* 체크리스트 탭 (사진 직접 업로드 및 수기 입력 방식 적용) */}
           {activeTab === 'checklist' && (
             <div className="flex flex-col gap-4">
               {selectedChecklistTripId ? (
@@ -1245,9 +1242,13 @@ export default function WTAApp() {
 
                     <button 
                       onClick={() => fileInputRefChecklist.current?.click()}
-                      className="text-xs text-purple-700 font-bold border-2 border-purple-300 px-2.5 py-1.5 rounded-xl flex items-center gap-1 bg-purple-50 shadow-sm"
+                      className={`text-xs font-bold border-2 px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-sm transition ${
+                        pendingChecklistImgUrl 
+                          ? 'bg-green-100 border-green-500 text-green-800' 
+                          : 'bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100'
+                      }`}
                     >
-                      <Camera className="w-3.5 h-3.5" /> 캡처 업로드
+                      <Camera className="w-3.5 h-3.5" /> {pendingChecklistImgUrl ? '📸 사진 선택됨' : '📸 사진 업로드'}
                     </button>
                   </div>
 
@@ -1266,7 +1267,7 @@ export default function WTAApp() {
                     </select>
                     <input
                       type="text"
-                      placeholder="준비물 입력..."
+                      placeholder="준비물 직접 입력..."
                       value={newItemText}
                       onChange={(e) => setNewItemText(e.target.value)}
                       className="flex-1 min-w-0 border-2 border-gray-300 rounded-xl px-2.5 py-2 text-xs font-bold text-black placeholder-gray-500 focus:outline-none focus:border-blue-500"
@@ -1297,7 +1298,7 @@ export default function WTAApp() {
                                 className="relative w-8 h-8 rounded-lg overflow-hidden border border-purple-300 cursor-pointer hover:opacity-80 group shadow-sm flex-shrink-0 bg-gray-100"
                                 title="클릭하여 원본 크게 보기"
                               >
-                                <img src={item.imageUrl} alt="항목 캡처" className="w-full h-full object-cover" />
+                                <img src={item.imageUrl} alt="항목 이미지" className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 flex items-center justify-center transition">
                                   <Maximize2 className="w-2.5 h-2.5 text-white" />
                                 </div>
@@ -1602,7 +1603,7 @@ export default function WTAApp() {
             <MapPin className="w-5 h-5" />
             <span className="text-[10px] mt-1">여정</span>
           </button>
-          <button onClick={() => setActiveTab('checklist')} className={`flex flex-col items-center ${activeTab === 'checklist' ? 'text-blue-600 font-bold' : 'text-gray-700'}`}>
+          <button onClick={() => setActiveTab('checklist')} className={`flex flex-col items-center ${activeTab === 'checklist' ? 'text-purple-600 font-bold' : 'text-gray-700'}`}>
             <CheckSquare className="w-5 h-5" />
             <span className="text-[10px] mt-1">체크리스트</span>
           </button>
