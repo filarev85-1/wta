@@ -6,7 +6,6 @@ import {
   Plus, Trash2, Camera, X, RefreshCw, ChevronLeft, Calendar, Clock, Image as ImageIcon, ExternalLink, Maximize2, ListChecks, Edit3, Heart, ChevronRight as ChevronRightIcon, Sparkles, Save, Settings
 } from 'lucide-react';
 
-// 💡 지정 순차 버저닝: v1.1.0
 const APP_VERSION = 'v1.1.0';
 
 interface PlaceCard {
@@ -553,13 +552,13 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
-  // 💡 [Option B 핵심] 체크리스트 사진 업로드 즉시 항목 자동 추가
+  // 💡 체크리스트 업로드 핸들러 보강 (fileUrl 매칭 및 팝업 에러 해결)
   const handleChecklistPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedChecklistTripId) return;
 
     setIsAnalyzing(true);
-    setAnalyzingMessage('☁️ 드라이브 업로드 및 항목 생성 중...');
+    setAnalyzingMessage('☁️ 드라이브 업로드 중...');
     try {
       const compressedFile = await compressFileBeforeUpload(file);
       const formData = new FormData();
@@ -569,7 +568,9 @@ export default function WTAApp() {
       const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
       const data = await apiRes.json();
 
-      if (data.fileUrl) {
+      const uploadedUrl = data.fileUrl || (data.extractedData && data.extractedData[0]?.imageUrl);
+
+      if (uploadedUrl) {
         const count = checklists.filter(c => c.tripId === selectedChecklistTripId).length + 1;
         const newItem: ChecklistItem = {
           id: Date.now(),
@@ -577,15 +578,14 @@ export default function WTAApp() {
           category: selectedCategory,
           title: newItemText.trim() ? newItemText : `사진 준비물 ${count}`,
           completed: false,
-          imageUrl: data.fileUrl,
+          imageUrl: uploadedUrl,
         };
 
         setChecklists(prev => [...prev, newItem]);
         setNewItemText('');
         setHasUnsavedChanges(true);
-        alert('🎉 준비물 사진이 추가되었습니다!');
       } else {
-        alert('사진 업로드에 실패했습니다.');
+        alert('사진 업로드 실패: 드라이브 업로드 URL을 생성하지 못했습니다.');
       }
     } catch (err) {
       alert('사진 업로드 중 오류가 발생했습니다.');
@@ -595,13 +595,6 @@ export default function WTAApp() {
         fileInputRefChecklist.current.value = '';
       }
     }
-  };
-
-  // 💡 체크리스트 항목 문구 직접 수정 기능
-  const handleChecklistTitleChange = (id: number, newTitle: string) => {
-    const updated = checklists.map(item => item.id === id ? { ...item, title: newTitle } : item);
-    setChecklists(updated);
-    setHasUnsavedChanges(true);
   };
 
   // 💡 여정 상세카드 캡처 고정 유지 로직
@@ -994,7 +987,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 여정 탭 (기존 정상 확인 코드 고정 유지) */}
+          {/* 여정 탭 */}
           {activeTab === 'itinerary' && (
             <div className="flex flex-col gap-4">
               {selectedTripId && selectedTrip ? (
@@ -1241,7 +1234,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 체크리스트 탭 (Option B: 사진 선택 즉시 자동 항목 추가) */}
+          {/* 체크리스트 탭 */}
           {activeTab === 'checklist' && (
             <div className="flex flex-col gap-4">
               {selectedChecklistTripId ? (
