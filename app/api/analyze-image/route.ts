@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 시도 (Quota 에러 시 무시하고 진행)
+    // 1. 구글 드라이브 업로드 시도 (Drive Quota 실패 시 안전 우회)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -68,14 +68,16 @@ export async function POST(req: NextRequest) {
       console.error('Drive quota ignored for AI analysis');
     }
 
-    // 2. Gemini AI 비전 시각 유추 분석 (글자가 없어도 음식/물건 자체를 인식)
+    // 2. Gemini AI 스마트 추출 (엔드포인트 404 오버라이드 모델명 적용)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (apiKey && (mode === 'checklist' || mode === 'place')) {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        
+        // 💡 404 에러 방지 공식 지원 모델 명칭 적용
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
 
         const imagePart = {
           inlineData: {
