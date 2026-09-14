@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 (개인 드라이브 저장 및 fileUrl 확정)
+    // 1. 구글 드라이브 업로드 (개인 드라이브 폴더 지정)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
           supportsTeamDrives: true,
         });
 
-        const fileId = response.data.id;
+        const fileId = response.data?.id;
         if (fileId) {
           try {
             await drive.permissions.create({
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Gemini AI 분석 (여정 상세 카드 'place' 모드 전용 고정)
+    // 2. Gemini AI 분석 (여정 상세 카드 'place' 모드 전용)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
