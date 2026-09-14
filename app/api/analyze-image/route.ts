@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드
+    // 1. 구글 드라이브(WTA_Captures)에 사진 직접 저장
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -64,11 +64,11 @@ export async function POST(req: NextRequest) {
       console.error('Drive upload error:', driveErr);
     }
 
-    // 2. Gemini AI 스마트 추출 (마크다운 파싱 안전화)
+    // 2. Gemini AI 스마트 파싱 (mode가 분석용일 경우)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
-    if (apiKey) {
+    if (apiKey && (mode === 'checklist' || mode === 'place')) {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
@@ -83,7 +83,6 @@ export async function POST(req: NextRequest) {
         if (mode === 'checklist') {
           const prompt = `이 이미지에 있는 여행 준비물, 장보기 항목, 음식 식재료를 추출해줘. 
 반드시 다른 설명 없이 JSON 배열 구조로만 작성해줘. 예시: [{"category": "음식/식재료", "title": "삼겹살"}]`;
-
           const result = await model.generateContent([prompt, imagePart]);
           const text = result.response.text();
           const cleanText = text.replace(/```json|```/g, '').trim();
@@ -94,7 +93,6 @@ export async function POST(req: NextRequest) {
         } else if (mode === 'place') {
           const prompt = `이 이미지에 있는 관광지나 맛집/카페 상호명(name), 주소(address), 팁(tip)을 추출해줘.
 반드시 다른 설명 없이 JSON 배열 구조로만 작성해줘. 예시: [{"name": "속초해수욕장", "address": "강원 속초시 조양동", "tip": "주차 가능"}]`;
-
           const result = await model.generateContent([prompt, imagePart]);
           const text = result.response.text();
           const cleanText = text.replace(/```json|```/g, '').trim();
@@ -104,7 +102,7 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (aiErr) {
-        console.error('Gemini AI 파싱 실패:', aiErr);
+        console.error('Gemini AI 분석 실패:', aiErr);
       }
     }
 

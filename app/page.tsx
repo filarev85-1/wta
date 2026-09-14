@@ -64,42 +64,6 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
-// 💡 캔버스 초경량 썸네일 생성 함수 (시트 5만자 오버플로우 방지)
-const compressImageForSheet = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxWidth = 250;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-        }
-
-        // 품질 0.3으로 초경량화하여 문자열 5,000자 이내 제어
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.3);
-        resolve(compressedDataUrl);
-      };
-      img.onerror = (err) => reject(err);
-    };
-    reader.onerror = (err) => reject(err);
-  });
-};
-
 export default function WTAApp() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
@@ -409,12 +373,14 @@ export default function WTAApp() {
   const handleWifePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      try {
-        const compressed = await compressImageForSheet(file);
-        setWifePhoto(compressed);
-        localStorage.setItem('wta_wife_photo', compressed);
-      } catch (err) {
-        console.error('프로필 사진 에러:', err);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('mode', 'profile');
+      const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.fileUrl) {
+        setWifePhoto(data.fileUrl);
+        localStorage.setItem('wta_wife_photo', data.fileUrl);
       }
     }
   };
@@ -422,12 +388,14 @@ export default function WTAApp() {
   const handleLoginBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      try {
-        const compressed = await compressImageForSheet(file);
-        setLoginBgPhoto(compressed);
-        localStorage.setItem('wta_login_bg', compressed);
-      } catch (err) {
-        console.error('배경 사진 에러:', err);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('mode', 'bg');
+      const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.fileUrl) {
+        setLoginBgPhoto(data.fileUrl);
+        localStorage.setItem('wta_login_bg', data.fileUrl);
       }
     }
   };
@@ -454,6 +422,7 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
+  // 🔥 추억 탭 구글 드라이브 업로드 및 URL 저장
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !selectedMemoryTripId) return;
@@ -463,8 +432,15 @@ export default function WTAApp() {
       const newImagesList: string[] = [];
 
       for (let i = 0; i < files.length; i++) {
-        const compressed = await compressImageForSheet(files[i]);
-        newImagesList.push(compressed);
+        const formData = new FormData();
+        formData.append('file', files[i]);
+        formData.append('mode', 'memory');
+
+        const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.fileUrl) {
+          newImagesList.push(data.fileUrl);
+        }
       }
 
       const updatedMemories = memoryTrips.map(t => {
@@ -477,9 +453,9 @@ export default function WTAApp() {
 
       setMemoryTrips(updatedMemories);
       setHasUnsavedChanges(true);
-      alert(`📸 ${files.length}장의 사진이 추가되었습니다!\n상단 [💾 저장하기] 버튼을 누르면 구글 시트에 저장됩니다.`);
+      alert(`📸 ${newImagesList.length}장의 사진이 구글 드라이브에 안전하게 보관되었습니다!\n상단 [💾 저장하기] 버튼을 누르시면 완료됩니다.`);
     } catch (err) {
-      alert('사진 추가 도중 에러가 발생했습니다.');
+      alert('사진 업로드 도중 에러가 발생했습니다.');
     } finally {
       setIsSyncing(false);
     }
@@ -498,14 +474,13 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
+  // 🔥 체크리스트 구글 드라이브 업로드 & Gemini AI 파싱
   const handleAnalyzeChecklistImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedChecklistTripId) return;
 
     setIsAnalyzing(true);
     try {
-      const compressedImage = await compressImageForSheet(file);
-      
       const formData = new FormData();
       formData.append('file', file);
       formData.append('mode', 'checklist');
@@ -513,7 +488,7 @@ export default function WTAApp() {
       const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
       const data = await apiRes.json();
 
-      const driveImgUrl = data.fileUrl || compressedImage;
+      const driveImgUrl = data.fileUrl || '';
 
       if (data.extractedData && data.extractedData.length > 0) {
         const newItems: ChecklistItem[] = data.extractedData.map((item: any, idx: number) => ({
@@ -527,7 +502,7 @@ export default function WTAApp() {
         const updated = [...checklists, ...newItems];
         setChecklists(updated);
         setHasUnsavedChanges(true);
-        alert(`🎉 캡처에서 ${newItems.length}개의 준비물을 추출했습니다!\n상단 [💾 저장하기] 버튼을 누르면 완전히 저장됩니다.`);
+        alert(`🎉 캡처에서 ${newItems.length}개의 준비물을 추출했습니다!\n상단 [💾 저장하기] 버튼을 누르면 구글 시트에 기록됩니다.`);
       } else {
         alert('이미지에서 준비물 항목을 추출하지 못했습니다.');
       }
@@ -538,15 +513,13 @@ export default function WTAApp() {
     }
   };
 
-  // 🔥 동선 카드 캡처 파싱 처리
+  // 🔥 동선 카드 구글 드라이브 업로드 & 상호/주소 파싱
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
 
     setIsAnalyzing(true);
     try {
-      const compressedImage = await compressImageForSheet(file);
-      
       const formData = new FormData();
       formData.append('file', file);
       formData.append('mode', 'place');
@@ -554,8 +527,9 @@ export default function WTAApp() {
       const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
       const data = await apiRes.json();
 
-      const cardImgUrl = data.fileUrl || compressedImage;
-      handlePlaceCardChange(targetCardId, 'imageUrl', cardImgUrl);
+      if (data.fileUrl) {
+        handlePlaceCardChange(targetCardId, 'imageUrl', data.fileUrl);
+      }
 
       if (data.extractedData && data.extractedData.length > 0) {
         const extracted = data.extractedData[0];
