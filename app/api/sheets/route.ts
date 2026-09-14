@@ -4,11 +4,16 @@ import { google } from 'googleapis';
 function getGoogleSheetsClient() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
-  // Vercel에 설정된 환경변수 이름(GOOGLE_SPREADSHEET_ID 및 대체 키 지원)
-  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+  
+  // Vercel에 설정될 수 있는 구글 시트 ID 환경변수 명칭 전수 체크
+  const spreadsheetId = 
+    process.env.GOOGLE_SPREADSHEET_ID || 
+    process.env.GOOGLE_SHEETS_SPREADSHEET_ID || 
+    process.env.SPREADSHEET_ID ||
+    process.env.NEXT_PUBLIC_GOOGLE_SPREADSHEET_ID;
 
   if (!email || !privateKey || !spreadsheetId) {
-    throw new Error('Google Sheets 환경 변수가 설정되지 않았습니다.');
+    throw new Error(`Google Sheets 환경 변수가 설정되지 않았습니다. (email: ${!!email}, key: ${!!privateKey}, id: ${!!spreadsheetId})`);
   }
 
   privateKey = privateKey.replace(/\\n/g, '\n');
