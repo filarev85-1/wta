@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 시도 (드라이브 권한 제한 시 안전 무시)
+    // 1. 구글 드라이브 업로드 시도 (드라이브 Quota 제한 시 안전 예외 처리 후 AI 분석 보장)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -65,59 +65,61 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (driveErr) {
-      console.error('Drive quota ignored for AI analysis');
+      console.error('Drive upload skipped (Proceeding to AI Analysis)');
     }
 
-    // 2. Gemini AI 스마트 시각 유추 분석 (gemini-1.5-flash 표준 고정)
+    // 2. Gemini AI 멀티모달 분석 (모델 폴백 안전 구조 적용)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (apiKey && (mode === 'checklist' || mode === 'place')) {
-      try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const genAI = new GoogleGenerativeAI(apiKey);
 
-        const imagePart = {
-          inlineData: {
-            data: buffer.toString('base64'),
-            mimeType: file.type || 'image/jpeg',
-          },
-        };
+      const imagePart = {
+        inlineData: {
+          data: buffer.toString('base64'),
+          mimeType: file.type || 'image/jpeg',
+        },
+      };
 
-        if (mode === 'checklist') {
-          const prompt = `이 이미지를 분석해줘. 
+      let prompt = '';
+      if (mode === 'checklist') {
+        prompt = `이 이미지를 분석해줘. 
 1. 글자/텍스트가 있다면 짐싸기 목록이나 장보기 항목을 추출해.
 2. 만약 글자가 없는 음식, 물건, 장비 사진(예: 물회, 삼겹살, 버너 등)이라면 시각적으로 보이는 대상의 이름을 유추해서 체크리스트 품목으로 만들어.
 카테고리는 무조건 [음식/식재료, 아이용품, 캠핑장비, 의류/세면, 중요사항, 기타] 중 하나로 지정해줘.
 반드시 마크다운 글자 없이 아래 형태의 순수 JSON 배열만 반환해:
 [{"category": "음식/식재료", "title": "물회"}]`;
-
-          const result = await model.generateContent([prompt, imagePart]);
-          const text = result.response.text();
-          const firstBracket = text.indexOf('[');
-          const lastBracket = text.lastIndexOf(']');
-          if (firstBracket !== -1 && lastBracket !== -1) {
-            const jsonString = text.substring(firstBracket, lastBracket + 1);
-            extractedData = JSON.parse(jsonString);
-          }
-        } else if (mode === 'place') {
-          const prompt = `이 이미지를 분석해줘.
+      } else if (mode === 'place') {
+        prompt = `이 이미지를 분석해줘.
 1. 지도/인스타그램/영수증 캡처라면 상호명(name), 주소(address), 팁(tip)을 추출해.
 2. 만약 일반 장소/음식 사진이라면 시각적인 특징을 통해 예상 장소나 대표 메뉴명을 상호명으로 유추해.
 반드시 마크다운 글자 없이 아래 형태의 순수 JSON 배열만 반환해:
 [{"name": "속초 물회 맛집", "address": "강원 속초시", "tip": "시원한 물회 추천"}]`;
+      }
 
+      // 💡 요청 후보 모델 리스트 (1차 실패 시 2차, 3차로 자동 폴백)
+      const candidateModels = ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'];
+      let aiResponseText = '';
+
+      for (const modelName of candidateModels) {
+        try {
+          const model = genAI.getGenerativeModel({ model: modelName });
           const result = await model.generateContent([prompt, imagePart]);
-          const text = result.response.text();
-          const firstBracket = text.indexOf('[');
-          const lastBracket = text.lastIndexOf(']');
-          if (firstBracket !== -1 && lastBracket !== -1) {
-            const jsonString = text.substring(firstBracket, lastBracket + 1);
-            extractedData = JSON.parse(jsonString);
-          }
+          aiResponseText = result.response.text();
+          if (aiResponseText) break; // 성공 시 반복문 탈출
+        } catch (modelErr) {
+          console.warn(`Model ${modelName} failed, trying next candidate...`);
         }
-      } catch (aiErr) {
-        console.error('Gemini AI 분석 실패:', aiErr);
+      }
+
+      if (aiResponseText) {
+        const firstBracket = aiResponseText.indexOf('[');
+        const lastBracket = aiResponseText.lastIndexOf(']');
+        if (firstBracket !== -1 && lastBracket !== -1) {
+          const jsonString = aiResponseText.substring(firstBracket, lastBracket + 1);
+          extractedData = JSON.parse(jsonString);
+        }
       }
     }
 
