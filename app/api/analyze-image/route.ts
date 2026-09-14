@@ -17,65 +17,86 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 (개인 드라이브 폴더 지정)
-    try {
-      const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-      let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
-      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    // 1. ImgBB API 연동 (추억, 프로필, 로그인 배경 등 초고속 업로드 전용)
+    const imgbbApiKey = process.env.IMGBB_API_KEY;
 
-      if (email && privateKey && folderId) {
-        privateKey = privateKey.replace(/\\n/g, '\n');
+    if (imgbbApiKey) {
+      try {
+        const base64Image = buffer.toString('base64');
+        const imgbbFormData = new FormData();
+        imgbbFormData.append('image', base64Image);
 
-        const auth = new google.auth.JWT({
-          email: email,
-          key: privateKey,
-          scopes: ['https://www.googleapis.com/auth/drive'],
+        const imgbbRes = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbApiKey}`, {
+          method: 'POST',
+          body: imgbbFormData,
         });
 
-        await auth.authorize();
-        const drive = google.drive({ version: 'v3', auth });
-
-        const stream = require('stream');
-        const bufferStream = new stream.PassThrough();
-        bufferStream.end(buffer);
-
-        const response = await drive.files.create({
-          requestBody: {
-            name: `WTA_${Date.now()}_${file.name}`,
-            parents: [folderId],
-          },
-          media: {
-            mimeType: file.type || 'image/jpeg',
-            body: bufferStream,
-          },
-          fields: 'id, webViewLink, webContentLink',
-          supportsAllDrives: true,
-          supportsTeamDrives: true,
-        });
-
-        const fileId = response.data?.id;
-        if (fileId) {
-          try {
-            await drive.permissions.create({
-              fileId: fileId,
-              requestBody: { role: 'reader', type: 'anyone' },
-              supportsAllDrives: true,
-            });
-          } catch (permErr: any) {
-            console.error('Drive permission warning:', permErr?.message || permErr);
-          }
-          fileUrl = `https://drive.google.com/uc?id=${fileId}`;
+        const imgbbData = await imgbbRes.json();
+        if (imgbbData.success && imgbbData.data?.url) {
+          fileUrl = imgbbData.data.url;
         }
-      }
-    } catch (driveErr: any) {
-      console.error('Drive upload warning:', driveErr?.message || driveErr);
-      if (driveErr?.response?.data?.id) {
-        const fileId = driveErr.response.data.id;
-        fileUrl = `https://drive.google.com/uc?id=${fileId}`;
+      } catch (imgbbErr: any) {
+        console.error('ImgBB API 업로드 오류:', imgbbErr?.message || imgbbErr);
       }
     }
 
-    // 2. Gemini AI 분석 (여정 상세 카드 'place' 모드 전용)
+    // 2. 구글 드라이브 백업 업로드 (ImgBB 실패 시 예외 백업용)
+    if (!fileUrl) {
+      try {
+        const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+        let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
+        const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
+        if (email && privateKey && folderId) {
+          privateKey = privateKey.replace(/\\n/g, '\n');
+
+          const auth = new google.auth.JWT({
+            email: email,
+            key: privateKey,
+            scopes: ['https://www.googleapis.com/auth/drive'],
+          });
+
+          await auth.authorize();
+          const drive = google.drive({ version: 'v3', auth });
+
+          const stream = require('stream');
+          const bufferStream = new stream.PassThrough();
+          bufferStream.end(buffer);
+
+          const response = await drive.files.create({
+            requestBody: {
+              name: `WTA_${Date.now()}_${file.name}`,
+              parents: [folderId],
+            },
+            media: {
+              mimeType: file.type || 'image/jpeg',
+              body: bufferStream,
+            },
+            fields: 'id, webViewLink, webContentLink',
+            supportsAllDrives: true,
+            supportsTeamDrives: true,
+          });
+
+          const fileId = response.data?.id;
+          if (fileId) {
+            try {
+              await drive.permissions.create({
+                fileId: fileId,
+                requestBody: { role: 'reader', type: 'anyone' },
+                supportsAllDrives: true,
+              });
+            } catch (permErr: any) {
+              console.error('Drive permission warning:', permErr?.message || permErr);
+            }
+            fileUrl = `https://drive.google.com/uc?id=${fileId}`;
+          }
+        }
+      } catch (driveErr: any) {
+        console.error('Drive upload warning:', driveErr?.message || driveErr);
+      }
+    }
+
+    // 3. Gemini AI 분석 (여정 상세 카드 'place' 모드 전용)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
