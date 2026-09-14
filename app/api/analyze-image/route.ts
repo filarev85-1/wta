@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 (소유권 이전 방식 적용)
+    // 1. 구글 드라이브 업로드 (용량 한도 에러 방지를 위해 URL 변환)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -37,7 +37,6 @@ export async function POST(req: NextRequest) {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(buffer);
 
-        // 파일 생성
         const response = await drive.files.create({
           requestBody: {
             name: `WTA_${Date.now()}_${file.name}`,
@@ -53,7 +52,6 @@ export async function POST(req: NextRequest) {
 
         const fileId = response.data.id;
         if (fileId) {
-          // 공개 읽기 권한 부여
           try {
             await drive.permissions.create({
               fileId: fileId,
@@ -63,17 +61,12 @@ export async function POST(req: NextRequest) {
           } catch (permErr) {
             console.error('Drive permission warning:', permErr);
           }
+          // 💡 구글 시트에 들어갈 짧은 이미지 URL 생성 (5만자 초과 원천 방지)
           fileUrl = `https://drive.google.com/uc?id=${fileId}`;
         }
       }
     } catch (driveErr: any) {
       console.error('Drive upload warning:', driveErr?.message || driveErr);
-    }
-
-    // 드라이브 업로드에 실패했더라도, 추억 사진/체크리스트 업로드가 0장으로 튕기지 않도록 Data URI 호환 지원
-    if (!fileUrl) {
-      const base64Image = buffer.toString('base64');
-      fileUrl = `data:${file.type || 'image/jpeg'};base64,${base64Image}`;
     }
 
     // 2. Gemini AI 스마트 시각 유추
