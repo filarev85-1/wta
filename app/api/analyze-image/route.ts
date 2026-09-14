@@ -1,116 +1,113 @@
+import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { GoogleGenAI } from '@google/genai';
-import { NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const auth = new google.auth.GoogleAuth({
-  credentials: {
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  },
-  scopes: ['https://www.googleapis.com/auth/drive.file'],
-});
-
-const drive = google.drive({ version: 'v3', auth });
-
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
-    const mode = (formData.get('mode') as string) || 'checklist';
+    const mode = formData.get('mode') as string;
 
     if (!file) {
-      return NextResponse.json({ success: false, error: '업로드할 이미지가 선택되지 않았습니다.' }, { status: 400 });
+      return NextResponse.json({ error: '파일이 없습니다.' }, { status: 400 });
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(await file.arrayBuffer());
+    let fileUrl = '';
 
-    let driveFileUrl = '';
+    // 1. 구글 드라이브 업로드 시도
+    try {
+      const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+      let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
+      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-    // 구글 드라이브 업로드 및 영구 접근 URL 생성
-    if (process.env.GOOGLE_DRIVE_FOLDER_ID) {
-      try {
-        const driveRes = await drive.files.create({
+      if (email && privateKey && folderId) {
+        // 개행 문자 처리
+        privateKey = privateKey.replace(/\\n/g, '\n');
+
+        const auth = new google.auth.JWT(
+          email,
+          undefined,
+          privateKey,
+          ['https://www.googleapis.com/auth/drive.file']
+        );
+
+        const drive = google.drive({ version: 'v3', auth });
+
+        const stream = require('stream');
+        const bufferStream = new stream.PassThrough();
+        bufferStream.end(buffer);
+
+        const response = await drive.files.create({
           requestBody: {
-            name: `WTA_${Date.now()}_${file.name}`,
-            parents: [process.env.GOOGLE_DRIVE_FOLDER_ID],
+            name: `wta_${Date.now()}_${file.name}`,
+            parents: [folderId],
           },
           media: {
             mimeType: file.type,
-            body: require('stream').Readable.from(buffer),
+            body: bufferStream,
           },
           fields: 'id, webViewLink, webContentLink',
         });
 
-        const fileId = driveRes.data.id;
+        const fileId = response.data.id;
         if (fileId) {
+          // 공개 권한 부여
           await drive.permissions.create({
-            fileId,
-            requestBody: { role: 'reader', type: 'anyone' },
+            fileId: fileId,
+            requestBody: {
+              role: 'reader',
+              type: 'anyone',
+            },
           });
-          driveFileUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
+          fileUrl = `https://drive.google.com/uc?id=${fileId}`;
         }
-      } catch (driveErr) {
-        console.error('Drive Upload Warning:', driveErr);
       }
+    } catch (driveErr) {
+      console.error('구글 드라이브 업로드 실패 (백업 모드 작동):', driveErr);
     }
 
+    // 2. Gemini AI를 활용한 이미지 분석 (체크리스트 / 장소 카드 추출)
+    let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ success: false, error: 'Gemini API 키가 설정되어 있지 않습니다.' }, { status: 400 });
-    }
 
-    const ai = new GoogleGenAI({ apiKey });
-    const base64Image = buffer.toString('base64');
+    if (apiKey) {
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    // Mode별 분리 프롬프트 설정 (과해석 방지)
-    const prompt = mode === 'checklist' 
-      ? `이 이미지에서 보이는 대표 항목(상품, 음식, 식재료, 장비 등)만 정확히 1~2개로 지정해줘.
-         보이지 않는 주변 용품(보조배터리 등)을 추측하거나 지어내지 마.
-         
-         카테고리 구분:
-         - 음식, 밀키트, 식재료, 음료, 간식: "음식/식재료"
-         - 아이 관련 용품: "아이용품"
-         - 캠핑, 아웃도어 장비: "캠핑장비"
-         - 의류, 세면도구: "의류/세면"
-         - 그 외 상품/용품: "기타"
-
-         응답 포맷 (JSON 전용): [{"category": "카테고리명", "title": "상품/음식/식재료명"}]`
-      : `이 이미지에서 장소의 정확한 상호명(장소명)과 주요 특징만 추출해줘. 
-         주소가 명확히 써있지 않다면 주소("address") 필드는 절대 추측하지 말고 빈 문자열("")로 남겨둬.
-         
-         응답 포맷 (JSON 전용): [{"name": "상호명", "address": "", "tip": "특징"}]`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: [
-        {
+        const imagePart = {
           inlineData: {
-            mimeType: file.type || 'image/jpeg',
-            data: base64Image,
+            data: buffer.toString('base64'),
+            mimeType: file.type,
           },
-        },
-        prompt,
-      ],
-    });
+        };
 
-    const rawText = response.text || '[]';
-    const jsonString = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-    
-    let extractedData = [];
-    try {
-      extractedData = JSON.parse(jsonString);
-    } catch (e) {
-      extractedData = [];
+        if (mode === 'checklist') {
+          const prompt = `이 이미지에 있는 여행 준비물, 짐싸기 목록, 텍스트들을 추출해줘. JSON 배열 형태로 출력해줘. 예: [{"category": "음식/식재료", "title": "삼겹살"}, {"category": "캠핑장비", "title": "랜턴"}]`;
+          const result = await model.generateContent([prompt, imagePart]);
+          const text = result.response.text();
+          const cleanJson = text.replace(/```json|```/g, '').trim();
+          extractedData = JSON.parse(cleanJson);
+        } else if (mode === 'place') {
+          const prompt = `이 이미지에 있는 여행 장소, 상호명, 주소, 팁 정보나 텍스트를 추출해줘. JSON 배열 형태로 출력해줘. 예: [{"name": "아침고요수목원", "address": "경기 가평군...", "tip": "유모차 추천"}]`;
+          const result = await model.generateContent([prompt, imagePart]);
+          const text = result.response.text();
+          const cleanJson = text.replace(/```json|```/g, '').trim();
+          extractedData = JSON.parse(cleanJson);
+        }
+      } catch (aiErr) {
+        console.error('Gemini AI 분석 에러:', aiErr);
+      }
     }
 
     return NextResponse.json({
       success: true,
-      fileUrl: driveFileUrl,
+      fileUrl,
       extractedData,
     });
-  } catch (error: any) {
-    console.error('Analyze Image Server Error:', error);
-    return NextResponse.json({ success: false, error: '이미지 분석 중 오류가 발생했습니다.' }, { status: 500 });
+  } catch (err: any) {
+    console.error('API 에러:', err);
+    return NextResponse.json({ error: err.message || '서버 오류 발생' }, { status: 500 });
   }
 }

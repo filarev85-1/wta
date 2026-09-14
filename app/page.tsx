@@ -64,8 +64,6 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
-const APP_VERSION = 'Ver 1.4';
-
 export default function WTAApp() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
@@ -92,50 +90,8 @@ export default function WTAApp() {
     return '/login-bg.jpg';
   });
 
-  const [trips, setTrips] = useState<Trip[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('wta_trips_data');
-      if (saved) {
-        try { return JSON.parse(saved); } catch (e) {}
-      }
-    }
-    return [
-      {
-        id: 'trip-1',
-        title: '아이와 함께하는 가평 힐링 캠핑',
-        startDate: '2026-09-14',
-        endDate: '2026-09-15',
-        type: '🏕️ 캠핑',
-        review: '가평 수목원과 캠핑장에서 유모차로 편하게 이동하며 아이와 완벽한 휴식을 즐겼습니다!',
-        memoriesImages: [
-          'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=500&auto=format&fit=crop&q=60'
-        ],
-        places: [
-          { 
-            id: 'p1', 
-            order: 1, 
-            ampm: '오전',
-            hour: '10',
-            minute: '00',
-            name: '아침고요수목원', 
-            address: '경기 가평군 상면 수목원로 432', 
-            mapUrl: 'https://m.map.naver.com/search2/search.naver?query=%EC%95%84%EC%B9%A8%EA%B3%A0%EC%9A%94%EC%88%98%EB%AA%A9%EC%9B%90',
-            tip: '유모차 이동 수월한 산책로 추천' 
-          }
-        ]
-      }
-    ];
-  });
-
-  const [memoryTrips, setMemoryTrips] = useState<Trip[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('wta_memories_data');
-      if (saved) {
-        try { return JSON.parse(saved); } catch (e) {}
-      }
-    }
-    return [];
-  });
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [memoryTrips, setMemoryTrips] = useState<Trip[]>([]);
 
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [selectedChecklistTripId, setSelectedChecklistTripId] = useState<string | null>(null);
@@ -146,16 +102,7 @@ export default function WTAApp() {
   const [newEndDate, setNewEndDate] = useState('');
   const [newTripType, setNewTripType] = useState('🏕️ 캠핑');
 
-  const [checklists, setChecklists] = useState<ChecklistItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('wta_checklists_data');
-      if (saved) {
-        try { return JSON.parse(saved); } catch (e) {}
-      }
-    }
-    return [];
-  });
-
+  const [checklists, setChecklists] = useState<ChecklistItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('음식/식재료');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -171,37 +118,31 @@ export default function WTAApp() {
   const [targetCardId, setTargetCardId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const authTime = localStorage.getItem('wta_auth_timestamp');
-      if (authTime) {
-        const elapsed = Date.now() - parseInt(authTime, 10);
-        if (elapsed < 30 * 60 * 1000) {
-          setIsAuthenticated(true);
-        } else {
-          localStorage.removeItem('wta_auth_timestamp');
-        }
-      }
+    if (isAuthenticated) {
+      loadAllDataFromSheets();
     }
-  }, []);
+  }, [isAuthenticated]);
 
-  useEffect(() => {
-    fetchChecklistFromSheets();
-    fetchTripsFromSheets();
-  }, []);
+  const loadAllDataFromSheets = async () => {
+    setIsSyncing(true);
+    try {
+      await Promise.all([fetchChecklistFromSheets(), fetchTripsFromSheets()]);
+    } catch (err) {
+      console.error('동기화 로드 오류:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const fetchChecklistFromSheets = async () => {
-    setIsSyncing(true);
     try {
       const res = await fetch('/api/sheets');
       const data = await res.json();
-      if (data.checklists && data.checklists.length > 0) {
+      if (data.checklists && Array.isArray(data.checklists)) {
         setChecklists(data.checklists);
-        localStorage.setItem('wta_checklists_data', JSON.stringify(data.checklists));
       }
     } catch (err) {
-      console.error('구글 시트 로드 실패:', err);
-    } finally {
-      setIsSyncing(false);
+      console.error('구글 시트 체크리스트 로드 실패:', err);
     }
   };
 
@@ -209,24 +150,18 @@ export default function WTAApp() {
     try {
       const res = await fetch('/api/sheets?type=trips');
       const data = await res.json();
-      if (data.trips && data.trips.length > 0) {
+      if (data.trips && Array.isArray(data.trips)) {
         setTrips(data.trips);
         setMemoryTrips(data.trips);
-        localStorage.setItem('wta_trips_data', JSON.stringify(data.trips));
-        localStorage.setItem('wta_memories_data', JSON.stringify(data.trips));
       }
     } catch (err) {
-      console.error('여정 목록 로드 실패:', err);
+      console.error('구글 시트 여정 목록 로드 실패:', err);
     }
   };
 
   const handleManualSave = async () => {
     setIsSyncing(true);
     try {
-      localStorage.setItem('wta_checklists_data', JSON.stringify(checklists));
-      localStorage.setItem('wta_trips_data', JSON.stringify(trips));
-      localStorage.setItem('wta_memories_data', JSON.stringify(memoryTrips));
-
       await fetch('/api/sheets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -240,10 +175,9 @@ export default function WTAApp() {
       });
 
       setHasUnsavedChanges(false);
-      alert('💾 모든 여정, 체크리스트, 추억 내용이 성공적으로 저장되었습니다!');
+      alert('💾 구글 시트 동기화 완! 모바일과 웹에 동일하게 적용되었습니다.');
     } catch (err) {
-      alert('저장 완료되었습니다! (로컬 영구 보관 완료)');
-      setHasUnsavedChanges(false);
+      alert('저장 중 오류가 발생했습니다.');
     } finally {
       setIsSyncing(false);
     }
@@ -253,7 +187,6 @@ export default function WTAApp() {
     e.preventDefault();
     if (password === '2927') {
       setIsAuthenticated(true);
-      localStorage.setItem('wta_auth_timestamp', Date.now().toString());
     } else {
       alert('비밀번호가 올바르지 않습니다.');
     }
@@ -262,7 +195,6 @@ export default function WTAApp() {
   const toggleCheck = (id: number) => {
     const updated = checklists.map(item => item.id === id ? { ...item, completed: !item.completed } : item);
     setChecklists(updated);
-    localStorage.setItem('wta_checklists_data', JSON.stringify(updated));
     setHasUnsavedChanges(true);
   };
 
@@ -271,17 +203,16 @@ export default function WTAApp() {
     const updated = [...checklists, { id: Date.now(), tripId: selectedChecklistTripId, category: selectedCategory, title: newItemText, completed: false }];
     setChecklists(updated);
     setNewItemText('');
-    localStorage.setItem('wta_checklists_data', JSON.stringify(updated));
     setHasUnsavedChanges(true);
   };
 
   const deleteItem = (id: number) => {
     const updated = checklists.filter(item => item.id !== id);
     setChecklists(updated);
-    localStorage.setItem('wta_checklists_data', JSON.stringify(updated));
     setHasUnsavedChanges(true);
   };
 
+  // 새 여정 생성 시 최초 카드는 오전 07:00 세팅
   const handleCreateTrip = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTripTitle.trim() || !newStartDate || !newEndDate) {
@@ -296,19 +227,15 @@ export default function WTAApp() {
       endDate: newEndDate,
       type: newTripType,
       places: [
-        { id: `p-${Date.now()}`, order: 1, ampm: '오전', hour: '10', minute: '00', name: '', address: '', tip: '상호명 또는 주소를 입력해 보세요.' }
+        { id: `p-${Date.now()}`, order: 1, ampm: '오전', hour: '07', minute: '00', name: '', address: '', tip: '상호명 또는 주소를 입력해 보세요.' }
       ]
     };
 
     const updated = [createdTrip, ...trips];
-    const updatedMemories = [createdTrip, ...memoryTrips];
     setTrips(updated);
-    setMemoryTrips(updatedMemories);
+    setMemoryTrips([createdTrip, ...memoryTrips]);
     setSelectedTripId(createdTrip.id);
     setIsWizardOpen(false);
-
-    localStorage.setItem('wta_trips_data', JSON.stringify(updated));
-    localStorage.setItem('wta_memories_data', JSON.stringify(updatedMemories));
     setHasUnsavedChanges(true);
 
     setNewTripTitle('');
@@ -332,7 +259,6 @@ export default function WTAApp() {
       if (selectedTripId === tripId) {
         setSelectedTripId(null);
       }
-      localStorage.setItem('wta_trips_data', JSON.stringify(updatedTrips));
       setHasUnsavedChanges(true);
     }
   };
@@ -351,22 +277,55 @@ export default function WTAApp() {
       if (selectedMemoryTripId === tripId) {
         setSelectedMemoryTripId(null);
       }
-      localStorage.setItem('wta_memories_data', JSON.stringify(updatedMemories));
       setHasUnsavedChanges(true);
     }
   };
 
+  // 1. 세부동선 카드 추가 시 이전 카드 기준 +2시간 자동 계산
   const handleAddPlaceCard = () => {
     if (!selectedTripId) return;
+    const currentTrip = trips.find(t => t.id === selectedTripId);
+    const places = currentTrip?.places || [];
+    
+    let nextAmpm = '오전';
+    let nextHour = '07';
+    let nextMinute = '00';
+
+    if (places.length > 0) {
+      const lastPlace = places[places.length - 1];
+      const lastAmpm = lastPlace.ampm || '오전';
+      let lastHourNum = parseInt(lastPlace.hour || '10', 10);
+      nextMinute = lastPlace.minute || '00';
+
+      // 24시간 체계로 변환
+      let totalHour24 = (lastAmpm === '오후' && lastHourNum !== 12) 
+        ? lastHourNum + 12 
+        : (lastAmpm === '오전' && lastHourNum === 12) ? 0 : lastHourNum;
+
+      // +2시간 추가
+      totalHour24 = (totalHour24 + 2) % 24;
+
+      // 다시 AM/PM 및 12시간 체계로 변환
+      if (totalHour24 >= 12) {
+        nextAmpm = '오후';
+        const h = totalHour24 === 12 ? 12 : totalHour24 - 12;
+        nextHour = h.toString().padStart(2, '0');
+      } else {
+        nextAmpm = '오전';
+        const h = totalHour24 === 0 ? 12 : totalHour24;
+        nextHour = h.toString().padStart(2, '0');
+      }
+    }
+
     const updatedTrips = trips.map(t => {
       if (t.id === selectedTripId) {
         const nextOrder = (t.places?.length || 0) + 1;
         const newCard: PlaceCard = {
           id: `p-${Date.now()}`,
           order: nextOrder,
-          ampm: '오후',
-          hour: '12',
-          minute: '00',
+          ampm: nextAmpm,
+          hour: nextHour,
+          minute: nextMinute,
           name: '',
           address: '',
           tip: '캡처 인식으로 상호나 주소를 읽어옵니다.',
@@ -376,7 +335,6 @@ export default function WTAApp() {
       return t;
     });
     setTrips(updatedTrips);
-    localStorage.setItem('wta_trips_data', JSON.stringify(updatedTrips));
     setHasUnsavedChanges(true);
   };
 
@@ -400,7 +358,6 @@ export default function WTAApp() {
         }
         return t;
       });
-      localStorage.setItem('wta_trips_data', JSON.stringify(updatedTrips));
       setHasUnsavedChanges(true);
       return updatedTrips;
     });
@@ -409,14 +366,12 @@ export default function WTAApp() {
   const handleTripTitleChange = (tripId: string, newTitle: string) => {
     const updatedTrips = trips.map(t => t.id === tripId ? { ...t, title: newTitle } : t);
     setTrips(updatedTrips);
-    localStorage.setItem('wta_trips_data', JSON.stringify(updatedTrips));
     setHasUnsavedChanges(true);
   };
 
   const handleTripReviewChange = (tripId: string, newReview: string) => {
     const updatedMemories = memoryTrips.map(t => t.id === tripId ? { ...t, review: newReview } : t);
     setMemoryTrips(updatedMemories);
-    localStorage.setItem('wta_memories_data', JSON.stringify(updatedMemories));
     setHasUnsavedChanges(true);
   };
 
@@ -468,39 +423,20 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  // ☁️ 추억 사진 무조건 구글 드라이브 100% 업로드
-  const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddMemoryImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedMemoryTripId) return;
 
-    setIsAnalyzing(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const res = await fetch('/api/upload-drive', { method: 'POST', body: formData });
-      const data = await res.json();
-
-      if (data.fileUrl) {
-        const updatedMemories = memoryTrips.map(t => {
-          if (t.id === selectedMemoryTripId) {
-            const imgs = t.memoriesImages || [];
-            return { ...t, memoriesImages: [...imgs, data.fileUrl] };
-          }
-          return t;
-        });
-        setMemoryTrips(updatedMemories);
-        localStorage.setItem('wta_memories_data', JSON.stringify(updatedMemories));
-        setHasUnsavedChanges(true);
-        alert('☁️ 추억 사진이 구글 드라이브에 안전하게 보관되었습니다!');
-      } else {
-        alert('구글 드라이브 사진 업로드에 실패했습니다.');
+    const imgUrl = URL.createObjectURL(file);
+    const updatedMemories = memoryTrips.map(t => {
+      if (t.id === selectedMemoryTripId) {
+        const imgs = t.memoriesImages || [];
+        return { ...t, memoriesImages: [...imgs, imgUrl] };
       }
-    } catch (err) {
-      alert('구글 드라이브 업로드 중 오류가 발생했습니다.');
-    } finally {
-      setIsAnalyzing(false);
-    }
+      return t;
+    });
+    setMemoryTrips(updatedMemories);
+    setHasUnsavedChanges(true);
   };
 
   const handleDeletePlaceCard = (cardId: string) => {
@@ -513,13 +449,14 @@ export default function WTAApp() {
       return t;
     });
     setTrips(updatedTrips);
-    localStorage.setItem('wta_trips_data', JSON.stringify(updatedTrips));
     setHasUnsavedChanges(true);
   };
 
   const handleAnalyzeChecklistImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedChecklistTripId) return;
+
+    const localImgUrl = URL.createObjectURL(file);
 
     setIsAnalyzing(true);
     const formData = new FormData();
@@ -530,7 +467,7 @@ export default function WTAApp() {
       const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
       const data = await res.json();
 
-      const driveImgUrl = data.fileUrl;
+      const driveImgUrl = data.fileUrl || localImgUrl;
 
       if (data.extractedData && data.extractedData.length > 0) {
         const newItems: ChecklistItem[] = data.extractedData.map((item: any, idx: number) => ({
@@ -543,9 +480,8 @@ export default function WTAApp() {
         }));
         const updated = [...checklists, ...newItems];
         setChecklists(updated);
-        localStorage.setItem('wta_checklists_data', JSON.stringify(updated));
         setHasUnsavedChanges(true);
-        alert(`🎉 캡처가 구글 드라이브에 저장되었으며 ${newItems.length}개의 준비물을 추출했습니다!`);
+        alert(`🎉 캡처에서 ${newItems.length}개의 준비물을 자동으로 추출하여 추가했습니다!\n상단 [💾 저장하기] 버튼을 누르면 완전히 저장됩니다.`);
       } else {
         alert('이미지에서 준비물 항목을 추출하지 못했습니다.');
       }
@@ -559,6 +495,9 @@ export default function WTAApp() {
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
+
+    const localImgUrl = URL.createObjectURL(file);
+    handlePlaceCardChange(targetCardId, 'imageUrl', localImgUrl);
 
     setIsAnalyzing(true);
     const formData = new FormData();
@@ -631,16 +570,12 @@ export default function WTAApp() {
 
   const filteredChecklists = checklists.filter(item => item.tripId === selectedChecklistTripId || (!item.tripId && selectedChecklistTripId === trips[0]?.id));
 
-  // 로그인 화면
+  // 최초 로그인 메인 화면
   if (!isAuthenticated) {
     return (
       <div className="flex justify-center bg-gray-100 min-h-screen">
         <main className="w-full max-w-md bg-white min-h-screen flex flex-col justify-center items-center p-6 shadow-md relative overflow-hidden">
           
-          <span className="absolute top-4 left-4 text-xs font-bold text-gray-800 bg-white/70 px-2 py-1 rounded-md z-20 shadow-sm border border-gray-200">
-            {APP_VERSION}
-          </span>
-
           <div 
             className="absolute inset-0 bg-cover bg-center transition-all duration-500"
             style={{ backgroundImage: `url(${loginBgPhoto})` }}
@@ -696,7 +631,7 @@ export default function WTAApp() {
 
   return (
     <div className="flex justify-center bg-gray-100 min-h-screen">
-      <main className="w-full max-w-md bg-white min-h-screen flex flex-col relative shadow-lg pb-24">
+      <main className="w-full max-w-md bg-white min-h-screen flex flex-col relative shadow-lg pb-20">
         
         <input 
           type="file" 
@@ -730,9 +665,13 @@ export default function WTAApp() {
         <header className="p-4 border-b border-gray-300 flex justify-between items-center bg-white sticky top-0 z-10">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-blue-600">WTA <span className="text-xs text-gray-700 font-medium">for 경완님</span></h1>
-            <span className="text-[10px] font-extrabold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
-              {APP_VERSION}
-            </span>
+            <button 
+              onClick={loadAllDataFromSheets}
+              className="p-1 text-gray-500 hover:text-blue-600 rounded-lg"
+              title="구글 시트 최신데이터 동기화"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-600' : ''}`} />
+            </button>
           </div>
           
           <button 
@@ -778,7 +717,7 @@ export default function WTAApp() {
                     <span>My Dearest Wife</span>
                   </div>
                   <p className="text-xs font-bold text-black mt-0.5">
-                    완이를 위한 WTA(Wany Travel Assistant)
+                    완이를 위한 WTA(Wife Travel Assistant)
                   </p>
                 </div>
               </div>
@@ -1025,7 +964,7 @@ export default function WTAApp() {
                                   <option value="오후">오후</option>
                                 </select>
                                 <select 
-                                  value={place.hour || '10'} 
+                                  value={place.hour || '07'} 
                                   onChange={(e) => handlePlaceCardChange(place.id, 'hour', e.target.value)}
                                   className="text-xs font-bold text-black bg-transparent focus:outline-none cursor-pointer"
                                 >
@@ -1112,7 +1051,7 @@ export default function WTAApp() {
                                   </div>
                                 </div>
                                 <div className="text-[11px] text-gray-600 font-medium">
-                                  <p className="font-bold text-black">구글 드라이브 캡처 이미지</p>
+                                  <p className="font-bold text-black">등록된 캡처 이미지</p>
                                   <p className="text-[10px] text-gray-500">클릭하여 큰 화면으로 보기</p>
                                 </div>
                               </div>
@@ -1210,36 +1149,30 @@ export default function WTAApp() {
                     </button>
                   </div>
 
-                  <form 
-                    onSubmit={(e) => { e.preventDefault(); addItem(); }}
-                    className="flex items-center gap-1.5 mt-1 w-full"
-                  >
+                  <div className="flex gap-2 mt-1">
                     <select 
                       value={selectedCategory} 
                       onChange={(e) => setSelectedCategory(e.target.value)}
-                      className="border-2 border-gray-300 rounded-xl px-2 py-2 text-xs bg-white font-bold text-black focus:outline-none flex-shrink-0"
+                      className="border-2 border-gray-300 rounded-xl px-2 py-2 text-xs bg-white font-bold text-black focus:outline-none"
                     >
-                      <option value="음식/식재료">🍖 음식</option>
-                      <option value="아이용품">👶 아이용</option>
-                      <option value="캠핑장비">🏕️ 캠핑</option>
-                      <option value="의류/세면">👕 의류</option>
-                      <option value="중요사항">🚨 중요</option>
+                      <option value="음식/식재료">🍖 음식/식재료</option>
+                      <option value="아이용품">👶 아이용품</option>
+                      <option value="캠핑장비">🏕️ 캠핑장비</option>
+                      <option value="의류/세면">👕 의류/세면</option>
+                      <option value="중요사항">🚨 중요사항</option>
                       <option value="기타">📌 기타</option>
                     </select>
                     <input
                       type="text"
-                      placeholder="새 준비물 입력 후 Enter..."
+                      placeholder="새 준비물 입력..."
                       value={newItemText}
                       onChange={(e) => setNewItemText(e.target.value)}
-                      className="flex-1 min-w-0 border-2 border-gray-300 rounded-xl px-2.5 py-2 text-xs font-bold text-black placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                      className="flex-1 border-2 border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-black placeholder-gray-500 focus:outline-none focus:border-blue-500"
                     />
-                    <button 
-                      type="submit" 
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl font-bold text-xs shadow flex-shrink-0"
-                    >
+                    <button onClick={addItem} className="bg-blue-600 text-white px-4 rounded-xl font-bold text-xs shadow">
                       추가
                     </button>
-                  </form>
+                  </div>
 
                   <div className="flex flex-col gap-2 mt-2">
                     {filteredChecklists.length > 0 ? (
@@ -1389,7 +1322,7 @@ export default function WTAApp() {
                       onClick={() => fileInputRefMemory.current?.click()}
                       className="w-full py-2 bg-pink-50 hover:bg-pink-100 border border-pink-300 text-pink-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-sm transition"
                     >
-                      <Camera className="w-3.5 h-3.5" /> 📸 구글 드라이브 추억 사진 추가
+                      <Camera className="w-3.5 h-3.5" /> 📸 추억 사진 추가하기
                     </button>
 
                     <div className="flex flex-col gap-1.5 mt-1">
@@ -1487,8 +1420,8 @@ export default function WTAApp() {
 
         {/* 새 여정 생성 모달 */}
         {isWizardOpen && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <form onSubmit={handleCreateTrip} className="bg-white w-full max-w-xs rounded-2xl p-5 flex flex-col gap-3 shadow-xl border">
+          <div className="absolute inset-0 bg-black/50 z-20 flex items-center justify-center p-4">
+            <form onSubmit={handleCreateTrip} className="bg-white w-full rounded-2xl p-5 flex flex-col gap-3 shadow-xl border">
               <div className="flex justify-between items-center border-b border-gray-200 pb-2">
                 <h3 className="font-bold text-sm text-black">✨ 경완님 새 여행 만들기</h3>
                 <button type="button" onClick={() => setIsWizardOpen(false)}><X className="w-4 h-4 text-gray-500" /></button>
@@ -1555,7 +1488,7 @@ export default function WTAApp() {
           </div>
         )}
 
-        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md h-16 bg-white border-t border-gray-300 flex justify-around items-center z-40 shadow-lg">
+        <nav className="absolute bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-300 flex justify-around items-center z-10">
           <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center ${activeTab === 'home' ? 'text-blue-600 font-bold' : 'text-gray-700'}`}>
             <Home className="w-5 h-5" />
             <span className="text-[10px] mt-1">홈</span>
