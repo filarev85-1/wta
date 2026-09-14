@@ -147,7 +147,6 @@ export default function WTAApp() {
   const [checklists, setChecklists] = useState<ChecklistItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('음식/식재료');
-  const [pendingChecklistImgUrl, setPendingChecklistImgUrl] = useState<string | null>(null);
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -273,12 +272,10 @@ export default function WTAApp() {
       tripId: selectedChecklistTripId, 
       category: selectedCategory, 
       title: newItemText, 
-      completed: false,
-      imageUrl: pendingChecklistImgUrl || undefined
+      completed: false 
     }];
     setChecklists(updated);
     setNewItemText('');
-    setPendingChecklistImgUrl(null);
     setHasUnsavedChanges(true);
   };
 
@@ -556,13 +553,13 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
-  // 💡 체크리스트 업로드: 단순 사진 첨부로 정비
+  // 💡 [Option B 핵심] 체크리스트 사진 업로드 즉시 항목 자동 추가
   const handleChecklistPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !selectedChecklistTripId) return;
 
     setIsAnalyzing(true);
-    setAnalyzingMessage('☁️ 드라이브 사진 업로드 중...');
+    setAnalyzingMessage('☁️ 드라이브 업로드 및 항목 생성 중...');
     try {
       const compressedFile = await compressFileBeforeUpload(file);
       const formData = new FormData();
@@ -573,14 +570,38 @@ export default function WTAApp() {
       const data = await apiRes.json();
 
       if (data.fileUrl) {
-        setPendingChecklistImgUrl(data.fileUrl);
-        alert('📸 사진이 등록되었습니다. 준비물 입력 후 [추가] 버튼을 눌러주세요.');
+        const count = checklists.filter(c => c.tripId === selectedChecklistTripId).length + 1;
+        const newItem: ChecklistItem = {
+          id: Date.now(),
+          tripId: selectedChecklistTripId,
+          category: selectedCategory,
+          title: newItemText.trim() ? newItemText : `사진 준비물 ${count}`,
+          completed: false,
+          imageUrl: data.fileUrl,
+        };
+
+        setChecklists(prev => [...prev, newItem]);
+        setNewItemText('');
+        setHasUnsavedChanges(true);
+        alert('🎉 준비물 사진이 추가되었습니다!');
+      } else {
+        alert('사진 업로드에 실패했습니다.');
       }
     } catch (err) {
       alert('사진 업로드 중 오류가 발생했습니다.');
     } finally {
       setIsAnalyzing(false);
+      if (fileInputRefChecklist.current) {
+        fileInputRefChecklist.current.value = '';
+      }
     }
+  };
+
+  // 💡 체크리스트 항목 문구 직접 수정 기능
+  const handleChecklistTitleChange = (id: number, newTitle: string) => {
+    const updated = checklists.map(item => item.id === id ? { ...item, title: newTitle } : item);
+    setChecklists(updated);
+    setHasUnsavedChanges(true);
   };
 
   // 💡 여정 상세카드 캡처 고정 유지 로직
@@ -973,7 +994,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 여정 탭 (기존 정상 확인 코드 유지) */}
+          {/* 여정 탭 (기존 정상 확인 코드 고정 유지) */}
           {activeTab === 'itinerary' && (
             <div className="flex flex-col gap-4">
               {selectedTripId && selectedTrip ? (
@@ -1220,7 +1241,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 체크리스트 탭 (사진 직접 업로드 및 수기 입력 방식 적용) */}
+          {/* 체크리스트 탭 (Option B: 사진 선택 즉시 자동 항목 추가) */}
           {activeTab === 'checklist' && (
             <div className="flex flex-col gap-4">
               {selectedChecklistTripId ? (
@@ -1242,13 +1263,9 @@ export default function WTAApp() {
 
                     <button 
                       onClick={() => fileInputRefChecklist.current?.click()}
-                      className={`text-xs font-bold border-2 px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-sm transition ${
-                        pendingChecklistImgUrl 
-                          ? 'bg-green-100 border-green-500 text-green-800' 
-                          : 'bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100'
-                      }`}
+                      className="text-xs font-bold border-2 border-purple-300 px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-sm transition bg-purple-50 text-purple-700 hover:bg-purple-100"
                     >
-                      <Camera className="w-3.5 h-3.5" /> {pendingChecklistImgUrl ? '📸 사진 선택됨' : '📸 사진 업로드'}
+                      <Camera className="w-3.5 h-3.5" /> 📸 사진 추가
                     </button>
                   </div>
 
@@ -1267,7 +1284,7 @@ export default function WTAApp() {
                     </select>
                     <input
                       type="text"
-                      placeholder="준비물 직접 입력..."
+                      placeholder="준비물 입력..."
                       value={newItemText}
                       onChange={(e) => setNewItemText(e.target.value)}
                       className="flex-1 min-w-0 border-2 border-gray-300 rounded-xl px-2.5 py-2 text-xs font-bold text-black placeholder-gray-500 focus:outline-none focus:border-blue-500"
@@ -1286,9 +1303,11 @@ export default function WTAApp() {
                         <div key={item.id} className="flex items-center justify-between p-3 border-2 border-gray-200 rounded-xl bg-white shadow-sm">
                           <div className="flex items-center gap-2 cursor-pointer flex-1 min-w-0" onClick={() => toggleCheck(item.id)}>
                             <input type="checkbox" checked={item.completed} onChange={() => {}} className="w-4 h-4 text-blue-600 rounded flex-shrink-0" />
-                            <span className={`text-xs truncate ${item.completed ? 'line-through text-gray-400 font-normal' : 'text-black font-bold'}`}>
-                              <strong className={`${item.category === '중요사항' ? 'text-red-600 font-black' : 'text-blue-700 font-extrabold'}`}>[{item.category}]</strong> {item.title}
-                            </span>
+                            <div className="flex-1 min-w-0 pr-1">
+                              <span className={`text-xs block truncate ${item.completed ? 'line-through text-gray-400 font-normal' : 'text-black font-bold'}`}>
+                                <strong className={`${item.category === '중요사항' ? 'text-red-600 font-black' : 'text-blue-700 font-extrabold'}`}>[{item.category}]</strong> {item.title}
+                              </span>
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-2 flex-shrink-0 ml-2">
