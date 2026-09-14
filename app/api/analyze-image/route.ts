@@ -15,21 +15,24 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 시도 (실패해도 AI 파싱은 정상 진행)
+    // 1. 구글 드라이브 업로드 (인증 강화)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
       const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
       if (email && privateKey && folderId) {
+        // 줄바꿈 이스케이프 문자 정제 처리
         privateKey = privateKey.replace(/\\n/g, '\n');
 
-        const auth = new google.auth.JWT(
-          email,
-          undefined,
-          privateKey,
-          ['https://www.googleapis.com/auth/drive']
-        );
+        const auth = new google.auth.JWT({
+          email: email,
+          key: privateKey,
+          scopes: ['https://www.googleapis.com/auth/drive'],
+        });
+
+        // JWT 인증 수행
+        await auth.authorize();
 
         const drive = google.drive({ version: 'v3', auth });
 
@@ -59,23 +62,24 @@ export async function POST(req: NextRequest) {
               supportsAllDrives: true,
             });
           } catch (permErr) {
-            console.error('Permission error ignored:', permErr);
+            console.error('Drive permission setting warning:', permErr);
           }
           fileUrl = `https://drive.google.com/uc?id=${fileId}`;
         }
       }
     } catch (driveErr) {
-      console.error('Drive upload error:', driveErr);
+      console.error('Drive upload authentication error:', driveErr);
     }
 
-    // 2. Gemini AI 스마트 추출 (마크다운 파싱 안전화)
+    // 2. Gemini AI 스마트 추출 (gemini-2.5-flash 모델 적용)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (apiKey && (mode === 'checklist' || mode === 'place')) {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        // 최신 표준 모델인 gemini-2.5-flash로 전환
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
         const imagePart = {
           inlineData: {
