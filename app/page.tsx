@@ -6,6 +6,9 @@ import {
   Plus, Trash2, Camera, X, RefreshCw, ChevronLeft, Calendar, Clock, Image as ImageIcon, ExternalLink, Maximize2, ListChecks, Edit3, Heart, ChevronRight as ChevronRightIcon, Sparkles, Save, Settings
 } from 'lucide-react';
 
+// 💡 현시점 고정 버전 (특별한 지정이 없을 시 1.0.1, 1.0.2 순으로 자동 업데이트)
+const APP_VERSION = 'v1.0.0';
+
 interface PlaceCard {
   id: string;
   order: number;
@@ -201,7 +204,6 @@ export default function WTAApp() {
     }
   };
 
-  // 💡 통합 저장하기: 앱의 모든 변경사항(여정+동선+체크리스트+추억)을 한 번에 저장
   const handleManualSave = async () => {
     setIsSyncing(true);
     try {
@@ -731,9 +733,15 @@ export default function WTAApp() {
           className="hidden" 
         />
 
-        {/* 💡 헤더: 동기화 버튼 제거 및 1개의 통합 저장하기 버튼만 우측 배치 */}
+        {/* 💡 헤더: 좌측 상단 WTA 로고 바로 옆 버전 고정 표기 (APP_VERSION) */}
         <header className="p-4 border-b border-gray-300 flex justify-between items-center bg-white sticky top-0 z-10 flex-shrink-0">
-          <h1 className="text-xl font-bold text-blue-600">WTA <span className="text-xs text-gray-700 font-medium">for 경완님</span></h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-blue-600">WTA</h1>
+            <span className="bg-blue-100 text-blue-800 text-[10px] font-extrabold px-1.5 py-0.5 rounded-md border border-blue-200">
+              {APP_VERSION}
+            </span>
+            <span className="text-xs text-gray-700 font-medium hidden sm:inline">for 경완님</span>
+          </div>
           
           <button 
             onClick={handleManualSave}
