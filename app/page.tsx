@@ -64,7 +64,6 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
-// 💡 413 Payload 용량 초과 방지 프론트엔드 사전 압축 함수 (Blob 반환)
 const compressFileBeforeUpload = (file: File): Promise<File> => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -376,6 +375,7 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
+  // 🔥 네이버 지도 연동 강화 (상호명/주소 변경 시 즉시 네이버 지도 URL 자동 갱신)
   const handlePlaceCardChange = (cardId: string, field: keyof PlaceCard, value: any) => {
     if (!selectedTripId) return;
     setTrips(prevTrips => {
@@ -387,6 +387,8 @@ export default function WTAApp() {
               const searchQuery = updatedCard.name || updatedCard.address;
               if (searchQuery) {
                 updatedCard.mapUrl = `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(searchQuery)}`;
+              } else {
+                updatedCard.mapUrl = undefined;
               }
               return updatedCard;
             }
@@ -519,7 +521,6 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
-  // 🔥 체크리스트 캡처 인식 사전 압축 보완
   const handleAnalyzeChecklistImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedChecklistTripId) return;
@@ -550,7 +551,7 @@ export default function WTAApp() {
         setHasUnsavedChanges(true);
         alert(`🎉 캡처에서 ${newItems.length}개의 준비물을 추출했습니다!\n상단 [💾 저장하기] 버튼을 누르면 구글 시트에 기록됩니다.`);
       } else {
-        alert('이미지에서 준비물 항목을 추출하지 못했습니다.');
+        alert('이미지에서 준비물 항목을 추출하지 못했습니다. (Vercel 설정에서 GEMINI_API_KEY를 확인해 주세요)');
       }
     } catch (err) {
       alert('이미지 분석 중 오류가 발생했습니다.');
@@ -559,7 +560,6 @@ export default function WTAApp() {
     }
   };
 
-  // 🔥 동선 카드 캡처 인식 사전 압축 보완
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
@@ -1011,120 +1011,127 @@ export default function WTAApp() {
 
                   <div className="flex flex-col gap-3">
                     {selectedTrip.places && selectedTrip.places.length > 0 ? (
-                      selectedTrip.places.map((place) => (
-                        <div key={place.id} className="p-3.5 border-2 border-gray-200 rounded-2xl bg-white shadow-sm flex flex-col gap-2 relative">
-                          <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="w-5 h-5 bg-blue-600 text-white text-xs font-extrabold rounded-full flex items-center justify-center shadow-sm">
-                                {place.order}
-                              </span>
-                              
-                              <div className="flex items-center gap-1 bg-gray-50 border border-gray-300 rounded-lg px-2 py-1">
-                                <Clock className="w-3.5 h-3.5 text-blue-600" />
-                                <select 
-                                  value={place.ampm || '오전'} 
-                                  onChange={(e) => handlePlaceCardChange(place.id, 'ampm', e.target.value)}
-                                  className="text-xs font-bold text-black bg-transparent focus:outline-none cursor-pointer"
-                                >
-                                  <option value="오전">오전</option>
-                                  <option value="오후">오후</option>
-                                </select>
-                                <select 
-                                  value={place.hour || '07'} 
-                                  onChange={(e) => handlePlaceCardChange(place.id, 'hour', e.target.value)}
-                                  className="text-xs font-bold text-black bg-transparent focus:outline-none cursor-pointer"
-                                >
-                                  {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
-                                    <option key={h} value={h.toString().padStart(2, '0')}>{h}시</option>
-                                  ))}
-                                </select>
-                                <span className="text-xs font-bold text-gray-500">:</span>
-                                <select 
-                                  value={place.minute || '00'} 
-                                  onChange={(e) => handlePlaceCardChange(place.id, 'minute', e.target.value)}
-                                  className="text-xs font-bold text-black bg-transparent focus:outline-none cursor-pointer"
-                                >
-                                  {['00', '10', '20', '30', '40', '50'].map((m) => (
-                                    <option key={m} value={m}>{m}분</option>
-                                  ))}
-                                </select>
+                      selectedTrip.places.map((place) => {
+                        const effectiveMapUrl = place.mapUrl || ((place.name || place.address) 
+                          ? `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(place.name || place.address)}` 
+                          : null);
+
+                        return (
+                          <div key={place.id} className="p-3.5 border-2 border-gray-200 rounded-2xl bg-white shadow-sm flex flex-col gap-2 relative">
+                            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="w-5 h-5 bg-blue-600 text-white text-xs font-extrabold rounded-full flex items-center justify-center shadow-sm">
+                                  {place.order}
+                                </span>
+                                
+                                <div className="flex items-center gap-1 bg-gray-50 border border-gray-300 rounded-lg px-2 py-1">
+                                  <Clock className="w-3.5 h-3.5 text-blue-600" />
+                                  <select 
+                                    value={place.ampm || '오전'} 
+                                    onChange={(e) => handlePlaceCardChange(place.id, 'ampm', e.target.value)}
+                                    className="text-xs font-bold text-black bg-transparent focus:outline-none cursor-pointer"
+                                  >
+                                    <option value="오전">오전</option>
+                                    <option value="오후">오후</option>
+                                  </select>
+                                  <select 
+                                    value={place.hour || '07'} 
+                                    onChange={(e) => handlePlaceCardChange(place.id, 'hour', e.target.value)}
+                                    className="text-xs font-bold text-black bg-transparent focus:outline-none cursor-pointer"
+                                  >
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                                      <option key={h} value={h.toString().padStart(2, '0')}>{h}시</option>
+                                    ))}
+                                  </select>
+                                  <span className="text-xs font-bold text-gray-500">:</span>
+                                  <select 
+                                    value={place.minute || '00'} 
+                                    onChange={(e) => handlePlaceCardChange(place.id, 'minute', e.target.value)}
+                                    className="text-xs font-bold text-black bg-transparent focus:outline-none cursor-pointer"
+                                  >
+                                    {['00', '10', '20', '30', '40', '50'].map((m) => (
+                                      <option key={m} value={m}>{m}분</option>
+                                    ))}
+                                  </select>
+                                </div>
                               </div>
-                            </div>
 
-                            <button 
-                              onClick={() => handleDeletePlaceCard(place.id)}
-                              className="text-gray-400 hover:text-red-500 p-1"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          <div className="flex flex-col gap-1.5 mt-1">
-                            <input 
-                              type="text"
-                              value={place.name}
-                              onChange={(e) => handlePlaceCardChange(place.id, 'name', e.target.value)}
-                              placeholder="상호명 또는 장소명 입력"
-                              className="border border-gray-300 rounded-xl px-3 py-1.5 text-xs font-bold text-black focus:outline-none focus:border-blue-500"
-                            />
-
-                            <input 
-                              type="text"
-                              value={place.address}
-                              onChange={(e) => handlePlaceCardChange(place.id, 'address', e.target.value)}
-                              placeholder="주소 또는 위치 입력"
-                              className="border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-black font-medium focus:outline-none focus:border-blue-500"
-                            />
-                          </div>
-
-                          {(place.name || place.address) && (
-                            <a 
-                              href={place.mapUrl || `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(place.name || place.address)}`} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              className="text-xs text-green-700 bg-green-50 border border-green-300 font-bold px-3 py-1.5 rounded-xl flex items-center justify-between hover:bg-green-100 transition mt-1"
-                            >
-                              <span>📍 네이버 지도에서 보기</span>
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          )}
-
-                          <div className="flex flex-col gap-2 pt-1 border-t border-gray-100">
-                            <div className="flex justify-between items-center">
-                              <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">
-                                💡 장소 정보 연동 완료
-                              </span>
                               <button 
-                                onClick={() => {
-                                  setTargetCardId(place.id);
-                                  fileInputRefPlaceCard.current?.click();
-                                }}
-                                className="text-[11px] text-purple-700 font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1 rounded-lg flex items-center gap-1 transition"
+                                onClick={() => handleDeletePlaceCard(place.id)}
+                                className="text-gray-400 hover:text-red-500 p-1"
                               >
-                                <ImageIcon className="w-3 h-3" /> 📸 캡처 사진 인식
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
 
-                            {place.imageUrl && (
-                              <div className="flex items-center gap-2 mt-1 bg-gray-50 p-2 rounded-xl border border-gray-200">
-                                <div 
-                                  onClick={() => setPreviewImage(place.imageUrl!)}
-                                  className="relative w-14 h-14 rounded-lg overflow-hidden border border-gray-300 cursor-pointer hover:opacity-80 group shadow-sm flex-shrink-0"
+                            <div className="flex flex-col gap-1.5 mt-1">
+                              <input 
+                                type="text"
+                                value={place.name}
+                                onChange={(e) => handlePlaceCardChange(place.id, 'name', e.target.value)}
+                                placeholder="상호명 또는 장소명 입력"
+                                className="border border-gray-300 rounded-xl px-3 py-1.5 text-xs font-bold text-black focus:outline-none focus:border-blue-500"
+                              />
+
+                              <input 
+                                type="text"
+                                value={place.address}
+                                onChange={(e) => handlePlaceCardChange(place.id, 'address', e.target.value)}
+                                placeholder="주소 또는 위치 입력"
+                                className="border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-black font-medium focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+
+                            {/* 🔥 상호명이나 주소가 하나라도 있으면 네이버 지도 연결 버튼 항시 표시 */}
+                            {effectiveMapUrl && (
+                              <a 
+                                href={effectiveMapUrl} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="text-xs text-green-700 bg-green-50 border border-green-300 font-bold px-3 py-1.5 rounded-xl flex items-center justify-between hover:bg-green-100 transition mt-1"
+                              >
+                                <span>📍 네이버 지도에서 보기</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+
+                            <div className="flex flex-col gap-2 pt-1 border-t border-gray-100">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">
+                                  💡 장소 정보 연동 완료
+                                </span>
+                                <button 
+                                  onClick={() => {
+                                    setTargetCardId(place.id);
+                                    fileInputRefPlaceCard.current?.click();
+                                  }}
+                                  className="text-[11px] text-purple-700 font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1 rounded-lg flex items-center gap-1 transition"
                                 >
-                                  <img src={place.imageUrl} alt="캡처 미리보기" className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 flex items-center justify-center transition">
-                                    <Maximize2 className="w-3.5 h-3.5 text-white" />
+                                  <ImageIcon className="w-3 h-3" /> 📸 캡처 사진 인식
+                                </button>
+                              </div>
+
+                              {place.imageUrl && (
+                                <div className="flex items-center gap-2 mt-1 bg-gray-50 p-2 rounded-xl border border-gray-200">
+                                  <div 
+                                    onClick={() => setPreviewImage(place.imageUrl!)}
+                                    className="relative w-14 h-14 rounded-lg overflow-hidden border border-gray-300 cursor-pointer hover:opacity-80 group shadow-sm flex-shrink-0"
+                                  >
+                                    <img src={place.imageUrl} alt="캡처 미리보기" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 flex items-center justify-center transition">
+                                      <Maximize2 className="w-3.5 h-3.5 text-white" />
+                                    </div>
+                                  </div>
+                                  <div className="text-[11px] text-gray-600 font-medium">
+                                    <p className="font-bold text-black">등록된 캡처 이미지</p>
+                                    <p className="text-[10px] text-gray-500">클릭하여 큰 화면으로 보기</p>
                                   </div>
                                 </div>
-                                <div className="text-[11px] text-gray-600 font-medium">
-                                  <p className="font-bold text-black">등록된 캡처 이미지</p>
-                                  <p className="text-[10px] text-gray-500">클릭하여 큰 화면으로 보기</p>
-                                </div>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
                       <div className="p-6 text-center text-xs text-gray-500 border-2 border-dashed rounded-2xl font-medium">
                         동선 카드가 없습니다. 상단 '+ 카드 추가'를 눌러 일정을 채워보세요!
