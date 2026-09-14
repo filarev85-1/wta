@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브(WTA_Captures)에 사진 직접 저장
+    // 1. 구글 드라이브 업로드 시도 (실패해도 AI 파싱은 진행)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -52,11 +52,15 @@ export async function POST(req: NextRequest) {
 
         const fileId = response.data.id;
         if (fileId) {
-          await drive.permissions.create({
-            fileId: fileId,
-            requestBody: { role: 'reader', type: 'anyone' },
-            supportsAllDrives: true,
-          });
+          try {
+            await drive.permissions.create({
+              fileId: fileId,
+              requestBody: { role: 'reader', type: 'anyone' },
+              supportsAllDrives: true,
+            });
+          } catch (permErr) {
+            console.error('Permission error ignored:', permErr);
+          }
           fileUrl = `https://drive.google.com/uc?id=${fileId}`;
         }
       }
@@ -64,7 +68,7 @@ export async function POST(req: NextRequest) {
       console.error('Drive upload error:', driveErr);
     }
 
-    // 2. Gemini AI 스마트 파싱 (mode가 분석용일 경우)
+    // 2. Gemini AI 스마트 추출 (마크다운 및 텍스트 정제 파싱)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -81,8 +85,12 @@ export async function POST(req: NextRequest) {
         };
 
         if (mode === 'checklist') {
-          const prompt = `이 이미지에 있는 여행 준비물, 장보기 항목, 음식 식재료를 추출해줘. 
-반드시 다른 설명 없이 JSON 배열 구조로만 작성해줘. 예시: [{"category": "음식/식재료", "title": "삼겹살"}]`;
+          const prompt = `이 이미지는 여행 짐싸기 목록, 장보기 영수증, 음식 또는 준비물 이미지야.
+이미지에 보이는 텍스트, 물건, 음식 재료들을 모두 찾아내서 짐싸기 체크리스트 항목으로 변환해줘.
+반드시 마크다운 글자(```json 등) 없이 아래 형태의 순수 JSON 배열만 반환해줘:
+[{"category": "음식/식재료", "title": "삼겹살"}, {"category": "캠핑장비", "title": "부탄가스"}]
+카테고리는 무조건 [음식/식재료, 아이용품, 캠핑장비, 의류/세면, 중요사항, 기타] 중 하나로 지정해줘.`;
+
           const result = await model.generateContent([prompt, imagePart]);
           const text = result.response.text();
           const cleanText = text.replace(/```json|```/g, '').trim();
@@ -91,8 +99,11 @@ export async function POST(req: NextRequest) {
             extractedData = JSON.parse(jsonMatch[0]);
           }
         } else if (mode === 'place') {
-          const prompt = `이 이미지에 있는 관광지나 맛집/카페 상호명(name), 주소(address), 팁(tip)을 추출해줘.
-반드시 다른 설명 없이 JSON 배열 구조로만 작성해줘. 예시: [{"name": "속초해수욕장", "address": "강원 속초시 조양동", "tip": "주차 가능"}]`;
+          const prompt = `이 이미지는 네이버지도, 인스타그램, 캡처 화면 또는 영수증 이미지야.
+이미지에서 관광지/맛집/카페 상호명(name), 주소(address), 팁 정보(tip)를 최우선으로 유추해서 추출해줘.
+반드시 마크다운 글자(```json 등) 없이 아래 형태의 순수 JSON 배열만 반환해줘:
+[{"name": "속초해수욕장", "address": "강원 속초시 조양동", "tip": "주차 가능"}]`;
+
           const result = await model.generateContent([prompt, imagePart]);
           const text = result.response.text();
           const cleanText = text.replace(/```json|```/g, '').trim();

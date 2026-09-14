@@ -64,6 +64,47 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
+// 💡 413 Payload 용량 초과 방지 프론트엔드 사전 압축 함수 (Blob 반환)
+const compressFileBeforeUpload = (file: File): Promise<File> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxWidth = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+        }
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, { type: 'image/jpeg' });
+            resolve(compressedFile);
+          } else {
+            resolve(file);
+          }
+        }, 'image/jpeg', 0.6);
+      };
+      img.onerror = () => resolve(file);
+    };
+    reader.onerror = () => resolve(file);
+  });
+};
+
 export default function WTAApp() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
@@ -375,8 +416,9 @@ export default function WTAApp() {
   const handleWifePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const compressedFile = await compressFileBeforeUpload(file);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressedFile);
       formData.append('mode', 'profile');
       const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
       const data = await res.json();
@@ -390,8 +432,9 @@ export default function WTAApp() {
   const handleLoginBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const compressedFile = await compressFileBeforeUpload(file);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressedFile);
       formData.append('mode', 'bg');
       const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
       const data = await res.json();
@@ -433,8 +476,9 @@ export default function WTAApp() {
       const newImagesList: string[] = [];
 
       for (let i = 0; i < files.length; i++) {
+        const compressedFile = await compressFileBeforeUpload(files[i]);
         const formData = new FormData();
-        formData.append('file', files[i]);
+        formData.append('file', compressedFile);
         formData.append('mode', 'memory');
 
         const res = await fetch('/api/analyze-image', { method: 'POST', body: formData });
@@ -454,7 +498,7 @@ export default function WTAApp() {
 
       setMemoryTrips(updatedMemories);
       setHasUnsavedChanges(true);
-      alert(`📸 ${newImagesList.length}장의 사진이 구글 드라이브에 안전하게 보관되었습니다!\n상단 [💾 저장하기] 버튼을 누르시면 완료됩니다.`);
+      alert(`📸 ${newImagesList.length}장의 사진이 구글 드라이브에 보관되었습니다!\n상단 [💾 저장하기] 버튼을 누르면 완전히 완료됩니다.`);
     } catch (err) {
       alert('사진 업로드 도중 에러가 발생했습니다.');
     } finally {
@@ -475,14 +519,16 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
+  // 🔥 체크리스트 캡처 인식 사전 압축 보완
   const handleAnalyzeChecklistImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedChecklistTripId) return;
 
     setIsAnalyzing(true);
     try {
+      const compressedFile = await compressFileBeforeUpload(file);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressedFile);
       formData.append('mode', 'checklist');
 
       const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
@@ -513,14 +559,16 @@ export default function WTAApp() {
     }
   };
 
+  // 🔥 동선 카드 캡처 인식 사전 압축 보완
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
 
     setIsAnalyzing(true);
     try {
+      const compressedFile = await compressFileBeforeUpload(file);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressedFile);
       formData.append('mode', 'place');
 
       const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
