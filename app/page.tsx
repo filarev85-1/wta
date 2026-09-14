@@ -64,6 +64,7 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
+// 💡 구글 시트 50,000자 제한을 절대 넘지 않는 초고효율 압축 (Max 350px, Quality 0.35)
 const compressImageForSheet = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -73,7 +74,7 @@ const compressImageForSheet = (file: File): Promise<string> => {
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxWidth = 500;
+        const maxWidth = 350;
         let width = img.width;
         let height = img.height;
 
@@ -89,7 +90,7 @@ const compressImageForSheet = (file: File): Promise<string> => {
           ctx.drawImage(img, 0, 0, width, height);
         }
 
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.5);
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.35);
         resolve(compressedDataUrl);
       };
       img.onerror = (err) => reject(err);
@@ -151,7 +152,6 @@ export default function WTAApp() {
   const fileInputRefLoginBg = useRef<HTMLInputElement>(null);
   const [targetCardId, setTargetCardId] = useState<string | null>(null);
 
-  // 로그인 시 무조건 구글 시트 복원 호출
   useEffect(() => {
     if (isAuthenticated) {
       loadAllDataFromSheets();
@@ -505,12 +505,8 @@ export default function WTAApp() {
     try {
       const compressedImage = await compressImageForSheet(file);
       
-      const res = await fetch(compressedImage);
-      const blob = await res.blob();
-      const smallFile = new File([blob], file.name, { type: 'image/jpeg' });
-
       const formData = new FormData();
-      formData.append('file', smallFile);
+      formData.append('file', file);
       formData.append('mode', 'checklist');
 
       const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
@@ -541,6 +537,7 @@ export default function WTAApp() {
     }
   };
 
+  // 🔥 동선 카드 캡처 주소/상호명 분석 보완
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
@@ -550,12 +547,8 @@ export default function WTAApp() {
       const compressedImage = await compressImageForSheet(file);
       handlePlaceCardChange(targetCardId, 'imageUrl', compressedImage);
 
-      const res = await fetch(compressedImage);
-      const blob = await res.blob();
-      const smallFile = new File([blob], file.name, { type: 'image/jpeg' });
-
       const formData = new FormData();
-      formData.append('file', smallFile);
+      formData.append('file', file);
       formData.append('mode', 'place');
 
       const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
@@ -717,7 +710,6 @@ export default function WTAApp() {
         <header className="p-4 border-b border-gray-300 flex justify-between items-center bg-white sticky top-0 z-10 flex-shrink-0">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-blue-600">WTA <span className="text-xs text-gray-700 font-medium">for 경완님</span></h1>
-            {/* 💡 데이터 수동 불러오기 및 복원 버튼 */}
             <button 
               onClick={loadAllDataFromSheets}
               className="p-1.5 bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg flex items-center gap-1 text-xs font-bold transition border"
@@ -1203,27 +1195,31 @@ export default function WTAApp() {
                     </button>
                   </div>
 
-                  <div className="flex gap-2 mt-1">
+                  {/* 💡 [3번 보완] 체크리스트 입력 UI 밀림 방지 */}
+                  <div className="flex items-center gap-1.5 mt-1 w-full">
                     <select 
                       value={selectedCategory} 
                       onChange={(e) => setSelectedCategory(e.target.value)}
-                      className="border-2 border-gray-300 rounded-xl px-2 py-2 text-xs bg-white font-bold text-black focus:outline-none"
+                      className="w-28 border-2 border-gray-300 rounded-xl px-1.5 py-2 text-xs bg-white font-bold text-black focus:outline-none flex-shrink-0"
                     >
-                      <option value="음식/식재료">🍖 음식/식재료</option>
-                      <option value="아이용품">👶 아이용품</option>
-                      <option value="캠핑장비">🏕️ 캠핑장비</option>
-                      <option value="의류/세면">👕 의류/세면</option>
-                      <option value="중요사항">🚨 중요사항</option>
+                      <option value="음식/식재료">🍖 음식</option>
+                      <option value="아이용품">👶 아이용</option>
+                      <option value="캠핑장비">🏕️ 캠핑</option>
+                      <option value="의류/세면">👕 의류</option>
+                      <option value="중요사항">🚨 중요</option>
                       <option value="기타">📌 기타</option>
                     </select>
                     <input
                       type="text"
-                      placeholder="새 준비물 입력..."
+                      placeholder="준비물 입력..."
                       value={newItemText}
                       onChange={(e) => setNewItemText(e.target.value)}
-                      className="flex-1 border-2 border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-black placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                      className="flex-1 min-w-0 border-2 border-gray-300 rounded-xl px-2.5 py-2 text-xs font-bold text-black placeholder-gray-500 focus:outline-none focus:border-blue-500"
                     />
-                    <button onClick={addItem} className="bg-blue-600 text-white px-4 rounded-xl font-bold text-xs shadow">
+                    <button 
+                      onClick={addItem} 
+                      className="w-14 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs shadow flex-shrink-0 text-center"
+                    >
                       추가
                     </button>
                   </div>
