@@ -64,12 +64,12 @@ const HOLIDAYS: Record<string, string> = {
   '2026-12-25': '성탄절',
 };
 
-// 💡 초경량 다중 파일 압축 함수
+// 💡 빌드 에러를 완벽 방지하는 초경량 다중 이미지 압축 함수
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = (event) => {
+    reader.onload = (event: ProgressEvent<FileReader>) => {
       const img = new Image();
       img.src = event.target?.result as string;
       img.onload = () => {
@@ -86,9 +86,10 @@ const compressImage = (file: File): Promise<string> => {
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+        }
 
-        // 60% 품질로 대폭 용량 감축하여 Vercel 413 페이로드 제한 회피
         const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
         resolve(compressedDataUrl);
       };
@@ -452,7 +453,7 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  // 🔥 [핵심 보완] 다중 이미지 일괄 압축 및 등록 (여러 장 한 번에 선택 가능)
+  // 🔥 다중 사진 추가 핸들러
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !selectedMemoryTripId) return;
@@ -476,7 +477,7 @@ export default function WTAApp() {
 
       setMemoryTrips(updatedMemories);
       setHasUnsavedChanges(true);
-      alert(`📸 ${files.length}장의 사진이 추가되었습니다!\n상단 [💾 저장하기] 버튼을 누르면 구글 시트에 안전하게 반영됩니다.`);
+      alert(`📸 ${files.length}장의 사진이 추가되었습니다!\n상단 [💾 저장하기] 버튼을 누르면 완전히 저장됩니다.`);
     } catch (err) {
       alert('사진 추가 도중 에러가 발생했습니다.');
     } finally {
@@ -698,8 +699,6 @@ export default function WTAApp() {
           onChange={handleAnalyzeCardImage} 
           className="hidden" 
         />
-        
-        {/* 🔥 다중 이미지 지원 (multiple 속성 추가) */}
         <input 
           type="file" 
           accept="image/*" 
@@ -708,7 +707,6 @@ export default function WTAApp() {
           onChange={handleAddMemoryImage} 
           className="hidden" 
         />
-        
         <input 
           type="file" 
           accept="image/*" 
