@@ -15,21 +15,20 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 시도
+    // 1. 구글 드라이브 공유 폴더로 직접 업로드
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
       const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
       if (email && privateKey && folderId) {
-        // 개행 문자 처리
         privateKey = privateKey.replace(/\\n/g, '\n');
 
         const auth = new google.auth.JWT(
           email,
           undefined,
           privateKey,
-          ['https://www.googleapis.com/auth/drive.file']
+          ['https://www.googleapis.com/auth/drive']
         );
 
         const drive = google.drive({ version: 'v3', auth });
@@ -38,9 +37,10 @@ export async function POST(req: NextRequest) {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(buffer);
 
+        // 부모 폴더 ID 지정하여 파일 생성
         const response = await drive.files.create({
           requestBody: {
-            name: `wta_${Date.now()}_${file.name}`,
+            name: `WTA_${Date.now()}_${file.name}`,
             parents: [folderId],
           },
           media: {
@@ -48,26 +48,29 @@ export async function POST(req: NextRequest) {
             body: bufferStream,
           },
           fields: 'id, webViewLink, webContentLink',
+          supportsAllDrives: true,
         });
 
         const fileId = response.data.id;
         if (fileId) {
-          // 공개 권한 부여
+          // 공유 권한 부여 (누구나 조회 가능)
           await drive.permissions.create({
             fileId: fileId,
             requestBody: {
               role: 'reader',
               type: 'anyone',
             },
+            supportsAllDrives: true,
           });
+          
           fileUrl = `https://drive.google.com/uc?id=${fileId}`;
         }
       }
     } catch (driveErr) {
-      console.error('구글 드라이브 업로드 실패 (백업 모드 작동):', driveErr);
+      console.error('구글 드라이브 업로드 오류 상세:', driveErr);
     }
 
-    // 2. Gemini AI를 활용한 이미지 분석 (체크리스트 / 장소 카드 추출)
+    // 2. Gemini AI를 활용한 이미지 분석
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
