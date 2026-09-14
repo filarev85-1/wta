@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 전용 업로드 (시트 5만자 초과 원천 방지)
+    // 1. 구글 드라이브 업로드 (구글 시트 5만자 초과 방지용 URL 발행)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -61,7 +61,6 @@ export async function POST(req: NextRequest) {
           } catch (permErr) {
             console.error('Drive permission warning:', permErr);
           }
-          // 구글 시트에 저장될 짧은 드라이브 링크
           fileUrl = `https://drive.google.com/uc?id=${fileId}`;
         }
       }
@@ -69,7 +68,7 @@ export async function POST(req: NextRequest) {
       console.error('Drive upload warning:', driveErr?.message || driveErr);
     }
 
-    // 2. Gemini AI 스마트 시각 유추
+    // 2. 최신 Gemini AI 모델 적용 (gemini-2.5-flash / gemini-flash-latest)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -99,6 +98,7 @@ export async function POST(req: NextRequest) {
 [{"name": "속초 물회 맛집", "address": "강원 속초시", "tip": "시원한 물회 추천"}]`;
       }
 
+      // 💡 종료된 1.5 대신 최신 2.5 및 최신 라벨 모델로 지정
       const candidateModels = ['gemini-2.5-flash', 'gemini-flash-latest'];
       let aiResponseText = '';
 
