@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Lock, CheckSquare, MapPin, Home, 
   Plus, Trash2, Camera, Share2, X, RefreshCw, ChevronLeft, Calendar, Clock, Image as ImageIcon, ExternalLink, Maximize2, ListChecks, ChevronRight, Edit3, Heart, ChevronRight as ChevronRightIcon, Sparkles, Save, Settings
@@ -116,19 +116,19 @@ export default function WTAApp() {
   const [currentCalDate, setCurrentCalDate] = useState(new Date());
   const [selectedCalTrip, setSelectedCalTrip] = useState<{ trip: Trip; dateStr: string } | null>(null);
 
-  const [wifePhoto, setWifePhoto] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('wta_wife_photo') || '/wife.jpg';
-    }
-    return '/wife.jpg';
-  });
+  // 💡 4번 보완: 프로필 및 로그인 사진 고정 (재로딩/깜빡임 방지)
+  const [wifePhoto, setWifePhoto] = useState<string>('/wife.jpg');
+  const [loginBgPhoto, setLoginBgPhoto] = useState<string>('/login-bg.jpg');
 
-  const [loginBgPhoto, setLoginBgPhoto] = useState<string>(() => {
+  useEffect(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('wta_login_bg') || '/login-bg.jpg';
+      const savedWife = localStorage.getItem('wta_wife_photo');
+      if (savedWife) setWifePhoto(savedWife);
+
+      const savedBg = localStorage.getItem('wta_login_bg');
+      if (savedBg) setLoginBgPhoto(savedBg);
     }
-    return '/login-bg.jpg';
-  });
+  }, []);
 
   const [trips, setTrips] = useState<Trip[]>([]);
   const [memoryTrips, setMemoryTrips] = useState<Trip[]>([]);
@@ -147,6 +147,7 @@ export default function WTAApp() {
   const [selectedCategory, setSelectedCategory] = useState('음식/식재료');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzingMessage, setAnalyzingMessage] = useState('☁️ 클라우드 업로드 및 캡처 인식 중...');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
@@ -160,14 +161,17 @@ export default function WTAApp() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadAllDataFromSheets();
+      loadAllDataFromSheets(true);
     }
   }, [isAuthenticated]);
 
-  const loadAllDataFromSheets = async () => {
+  const loadAllDataFromSheets = async (isInitial = false) => {
     setIsSyncing(true);
     try {
       await Promise.all([fetchChecklistFromSheets(), fetchTripsFromSheets()]);
+      if (!isInitial) {
+        alert('🔄 동기화가 완료되었습니다.');
+      }
     } catch (err) {
       console.error('동기화 로드 오류:', err);
     } finally {
@@ -184,7 +188,7 @@ export default function WTAApp() {
         setChecklists(data.checklists);
       }
     } catch (err) {
-      console.error('구글 시트 체크리스트 로드 실패:', err);
+      console.error('체크리스트 로드 실패:', err);
     }
   };
 
@@ -197,7 +201,7 @@ export default function WTAApp() {
         setMemoryTrips(data.trips);
       }
     } catch (err) {
-      console.error('구글 시트 여정 목록 로드 실패:', err);
+      console.error('여정 목록 로드 실패:', err);
     }
   };
 
@@ -217,7 +221,8 @@ export default function WTAApp() {
       });
 
       setHasUnsavedChanges(false);
-      alert('💾 구글 시트 동기화 완료! 모바일과 웹에 동일하게 적용되었습니다.');
+      // 💡 1번 보완: 담백한 팝업 멘트
+      alert('💾 저장 완료');
     } catch (err) {
       alert('저장 중 오류가 발생했습니다.');
     } finally {
@@ -309,7 +314,7 @@ export default function WTAApp() {
 
     const target = memoryTrips.find(t => t.id === tripId);
     const confirmMsg = target 
-      ? `'${target.title}' 추억 기록을 정말 삭제하시겠습니까?\n(등록된 추억 사진 및 리뷰가 함께 삭제됩니다.)`
+      ? `'${target.title}' 추억 기록을 정말 삭제하시겠습니까?`
       : '이 추억 기록을 정말 삭제하시겠습니까?';
 
     if (window.confirm(confirmMsg)) {
@@ -468,12 +473,15 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
+  // 💡 3번 보완: 추억 사진 업로드 시 상단 업로드 중 띠 표시
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !selectedMemoryTripId) return;
 
+    setIsAnalyzing(true);
+    setAnalyzingMessage('☁️ 클라우드 업로드 및 추억 사진 저장 중...');
+
     try {
-      setIsSyncing(true);
       const newImagesList: string[] = [];
 
       for (let i = 0; i < files.length; i++) {
@@ -499,11 +507,12 @@ export default function WTAApp() {
 
       setMemoryTrips(updatedMemories);
       setHasUnsavedChanges(true);
-      alert(`📸 ${newImagesList.length}장의 사진이 구글 드라이브에 보관되었습니다!\n상단 [💾 저장하기] 버튼을 누르면 완전히 완료됩니다.`);
+      // 💡 1번 보완: 담백한 팝업 멘트
+      alert(`📸 ${newImagesList.length}장의 사진이 추가되었습니다.`);
     } catch (err) {
       alert('사진 업로드 도중 에러가 발생했습니다.');
     } finally {
-      setIsSyncing(false);
+      setIsAnalyzing(false);
     }
   };
 
@@ -525,6 +534,8 @@ export default function WTAApp() {
     if (!file || !selectedChecklistTripId) return;
 
     setIsAnalyzing(true);
+    // 💡 2번 보완: "구글" 지우고 "☁️ 클라우드 업로드 및 캡처 인식 중..."
+    setAnalyzingMessage('☁️ 클라우드 업로드 및 캡처 인식 중...');
     try {
       const compressedFile = await compressFileBeforeUpload(file);
       const formData = new FormData();
@@ -548,7 +559,8 @@ export default function WTAApp() {
         const updated = [...checklists, ...newItems];
         setChecklists(updated);
         setHasUnsavedChanges(true);
-        alert(`🎉 캡처에서 ${newItems.length}개의 준비물을 추출했습니다!\n상단 [💾 저장하기] 버튼을 누르면 구글 시트에 기록됩니다.`);
+        // 💡 1번 보완: 담백한 팝업 멘트
+        alert(`🎉 준비물 ${newItems.length}개가 추출되었습니다.`);
       } else {
         alert('이미지에서 준비물 항목을 추출하지 못했습니다.');
       }
@@ -564,6 +576,8 @@ export default function WTAApp() {
     if (!file || !targetCardId) return;
 
     setIsAnalyzing(true);
+    // 💡 2번 보완: "구글" 지우고 "☁️ 클라우드 업로드 및 캡처 인식 중..."
+    setAnalyzingMessage('☁️ 클라우드 업로드 및 캡처 인식 중...');
     try {
       const compressedFile = await compressFileBeforeUpload(file);
       const formData = new FormData();
@@ -730,9 +744,9 @@ export default function WTAApp() {
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-blue-600">WTA <span className="text-xs text-gray-700 font-medium">for 경완님</span></h1>
             <button 
-              onClick={loadAllDataFromSheets}
+              onClick={() => loadAllDataFromSheets(false)}
               className="p-1.5 bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg flex items-center gap-1 text-xs font-bold transition border"
-              title="구글 시트 데이터 불러오기"
+              title="데이터 불러오기"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-600' : ''}`} />
               <span>동기화</span>
@@ -753,9 +767,10 @@ export default function WTAApp() {
           </button>
         </header>
 
+        {/* 💡 2번 & 3번 보완: "구글" 문구 삭제 및 클라우드 업로드 공용 상태바 표기 */}
         {isAnalyzing && (
           <div className="bg-purple-600 text-white text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-2 flex-shrink-0">
-            <RefreshCw className="w-4 h-4 animate-spin" /> 구글 드라이브 업로드 및 캡처 인식 중...
+            <RefreshCw className="w-4 h-4 animate-spin" /> {analyzingMessage}
           </div>
         )}
 
@@ -764,13 +779,19 @@ export default function WTAApp() {
           {activeTab === 'home' && (
             <div className="flex flex-col gap-4">
               
+              {/* 💡 4번 보완: 프로필 로딩 없이 고정유지 */}
               <div className="p-3.5 border-2 border-pink-200 bg-pink-50/60 rounded-2xl flex items-center gap-3 shadow-sm relative">
                 <div 
                   onClick={() => fileInputRefWife.current?.click()}
-                  className="relative w-14 h-14 rounded-full overflow-hidden border-2 border-pink-400 cursor-pointer hover:opacity-80 flex-shrink-0 shadow"
+                  className="relative w-14 h-14 rounded-full overflow-hidden border-2 border-pink-400 cursor-pointer hover:opacity-80 flex-shrink-0 shadow bg-gray-200"
                   title="클릭하여 사진 변경하기"
                 >
-                  <img src={wifePhoto} alt="아내 프로필" className="w-full h-full object-cover" />
+                  <img 
+                    src={wifePhoto} 
+                    alt="아내 프로필" 
+                    className="w-full h-full object-cover"
+                    loading="eager"
+                  />
                   <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition">
                     <Camera className="w-4 h-4 text-white" />
                   </div>
@@ -803,7 +824,7 @@ export default function WTAApp() {
                 </div>
               ) : (
                 <div className="p-4 bg-blue-50 border-2 border-dashed border-blue-300 rounded-2xl text-center text-xs font-bold text-blue-700">
-                  {isInitialLoading ? '구글 시트에서 여정을 불러오는 중입니다...' : '등록된 예정 여정이 없습니다. 아래 버튼을 눌러 여정을 만들어 보세요!'}
+                  {isInitialLoading ? '여정을 불러오는 중입니다...' : '등록된 예정 여정이 없습니다. 아래 버튼을 눌러 여정을 만들어 보세요!'}
                 </div>
               )}
 
@@ -1184,7 +1205,7 @@ export default function WTAApp() {
                       ))
                     ) : (
                       <div className="p-8 text-center text-xs text-gray-500 border-2 border-dashed rounded-2xl font-medium">
-                        {isInitialLoading ? '구글 시트 데이터를 로딩 중입니다...' : '등록된 여정이 없습니다. 새 여정을 만들어 보세요!'}
+                        {isInitialLoading ? '여정 데이터를 로딩 중입니다...' : '등록된 여정이 없습니다. 새 여정을 만들어 보세요!'}
                       </div>
                     )}
                   </div>
