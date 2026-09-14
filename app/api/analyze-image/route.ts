@@ -15,14 +15,13 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 (인증 강화)
+    // 1. 구글 드라이브 업로드 시도 (Quota 없어도 예외 처리 후 AI 파싱으로 진행)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
       const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
       if (email && privateKey && folderId) {
-        // 줄바꿈 이스케이프 문자 정제 처리
         privateKey = privateKey.replace(/\\n/g, '\n');
 
         const auth = new google.auth.JWT({
@@ -31,9 +30,7 @@ export async function POST(req: NextRequest) {
           scopes: ['https://www.googleapis.com/auth/drive'],
         });
 
-        // JWT 인증 수행
         await auth.authorize();
-
         const drive = google.drive({ version: 'v3', auth });
 
         const stream = require('stream');
@@ -68,18 +65,17 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (driveErr) {
-      console.error('Drive upload authentication error:', driveErr);
+      console.error('Drive upload quota warning (Ignored for AI Analysis):', driveErr);
     }
 
-    // 2. Gemini AI 스마트 추출 (gemini-2.5-flash 모델 적용)
+    // 2. Gemini AI 분석 (모델 명칭: gemini-1.5-flash 표준 고정)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (apiKey && (mode === 'checklist' || mode === 'place')) {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        // 최신 표준 모델인 gemini-2.5-flash로 전환
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
         const imagePart = {
           inlineData: {
