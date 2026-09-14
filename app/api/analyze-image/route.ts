@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 업로드 시도 (Quota 등 드라이브 권한 문제 발생 시 우회 후 AI 분석 진행)
+    // 1. 구글 드라이브 업로드 (개인 드라이브 공간 공유 연동)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(buffer);
 
+        // 개인 구글 드라이브 폴더 권한 연동 생성
         const response = await drive.files.create({
           requestBody: {
             name: `WTA_${Date.now()}_${file.name}`,
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
           },
           fields: 'id, webViewLink, webContentLink',
           supportsAllDrives: true,
+          supportsTeamDrives: true,
         });
 
         const fileId = response.data.id;
@@ -65,10 +67,10 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (driveErr) {
-      console.error('Drive upload skipped (Proceeding to AI Analysis)');
+      console.error('Drive upload warning:', driveErr);
     }
 
-    // 2. Gemini AI 스마트 시각 유추 (검증된 정식 최신 gemini-2.5-flash 적용)
+    // 2. Gemini AI 스마트 시각 유추 (gemini-2.5-flash / gemini-flash-latest)
     let extractedData: any[] = [];
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -98,7 +100,6 @@ export async function POST(req: NextRequest) {
 [{"name": "속초 물회 맛집", "address": "강원 속초시", "tip": "시원한 물회 추천"}]`;
       }
 
-      // 💡 최신 공식 지원 모델 고정 및 동적 최신 별칭 폴백
       const candidateModels = ['gemini-2.5-flash', 'gemini-flash-latest'];
       let aiResponseText = '';
 
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest) {
           aiResponseText = result.response.text();
           if (aiResponseText) break;
         } catch (modelErr) {
-          console.warn(`Model ${modelName} failed, trying candidate...`, modelErr);
+          console.warn(`Model ${modelName} failed:`, modelErr);
         }
       }
 
