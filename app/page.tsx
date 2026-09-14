@@ -38,7 +38,6 @@ interface ChecklistItem {
   category: string;
   title: string;
   completed: boolean;
-  imageUrl?: string;
 }
 
 const HOLIDAYS: Record<string, string> = {
@@ -154,7 +153,6 @@ export default function WTAApp() {
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
   const [memoryImgIdx, setMemoryImgIdx] = useState<number>(0);
-  const fileInputRefChecklist = useRef<HTMLInputElement>(null);
   const fileInputRefPlaceCard = useRef<HTMLInputElement>(null);
   const fileInputRefMemory = useRef<HTMLInputElement>(null);
   const fileInputRefWife = useRef<HTMLInputElement>(null);
@@ -270,7 +268,7 @@ export default function WTAApp() {
       id: Date.now(), 
       tripId: selectedChecklistTripId, 
       category: selectedCategory, 
-      title: newItemText, 
+      title: newItemText.trim(), 
       completed: false 
     }];
     setChecklists(updated);
@@ -552,52 +550,7 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
-  // 💡 체크리스트 업로드 핸들러 보강 (fileUrl 매칭 및 팝업 에러 해결)
-  const handleChecklistPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedChecklistTripId) return;
-
-    setIsAnalyzing(true);
-    setAnalyzingMessage('☁️ 드라이브 업로드 중...');
-    try {
-      const compressedFile = await compressFileBeforeUpload(file);
-      const formData = new FormData();
-      formData.append('file', compressedFile);
-      formData.append('mode', 'checklist');
-
-      const apiRes = await fetch('/api/analyze-image', { method: 'POST', body: formData });
-      const data = await apiRes.json();
-
-      const uploadedUrl = data.fileUrl || (data.extractedData && data.extractedData[0]?.imageUrl);
-
-      if (uploadedUrl) {
-        const count = checklists.filter(c => c.tripId === selectedChecklistTripId).length + 1;
-        const newItem: ChecklistItem = {
-          id: Date.now(),
-          tripId: selectedChecklistTripId,
-          category: selectedCategory,
-          title: newItemText.trim() ? newItemText : `사진 준비물 ${count}`,
-          completed: false,
-          imageUrl: uploadedUrl,
-        };
-
-        setChecklists(prev => [...prev, newItem]);
-        setNewItemText('');
-        setHasUnsavedChanges(true);
-      } else {
-        alert('사진 업로드 실패: 드라이브 업로드 URL을 생성하지 못했습니다.');
-      }
-    } catch (err) {
-      alert('사진 업로드 중 오류가 발생했습니다.');
-    } finally {
-      setIsAnalyzing(false);
-      if (fileInputRefChecklist.current) {
-        fileInputRefChecklist.current.value = '';
-      }
-    }
-  };
-
-  // 💡 여정 상세카드 캡처 고정 유지 로직
+  // 💡 여정 상세카드 캡처 고정 유지 로직 (정상 확인 코드)
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
@@ -736,13 +689,6 @@ export default function WTAApp() {
     <div className="flex justify-center bg-gray-100 min-h-screen">
       <main className="w-full max-w-md bg-white h-screen flex flex-col relative shadow-lg overflow-hidden">
         
-        <input 
-          type="file" 
-          accept="image/*" 
-          ref={fileInputRefChecklist} 
-          onChange={handleChecklistPhotoUpload} 
-          className="hidden" 
-        />
         <input 
           type="file" 
           accept="image/*" 
@@ -1234,7 +1180,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 체크리스트 탭 */}
+          {/* 체크리스트 탭 (100% 수기 전용 안정화) */}
           {activeTab === 'checklist' && (
             <div className="flex flex-col gap-4">
               {selectedChecklistTripId ? (
@@ -1253,13 +1199,6 @@ export default function WTAApp() {
                       </span>
                       <h2 className="font-bold text-base text-black mt-1">📦 {selectedChecklistTrip?.title} 짐 싸기</h2>
                     </div>
-
-                    <button 
-                      onClick={() => fileInputRefChecklist.current?.click()}
-                      className="text-xs font-bold border-2 border-purple-300 px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-sm transition bg-purple-50 text-purple-700 hover:bg-purple-100"
-                    >
-                      <Camera className="w-3.5 h-3.5" /> 📸 사진 추가
-                    </button>
                   </div>
 
                   <div className="flex items-center gap-1.5 mt-1 w-full">
@@ -1280,6 +1219,7 @@ export default function WTAApp() {
                       placeholder="준비물 입력..."
                       value={newItemText}
                       onChange={(e) => setNewItemText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') addItem(); }}
                       className="flex-1 min-w-0 border-2 border-gray-300 rounded-xl px-2.5 py-2 text-xs font-bold text-black placeholder-gray-500 focus:outline-none focus:border-blue-500"
                     />
                     <button 
@@ -1303,24 +1243,9 @@ export default function WTAApp() {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                            {item.imageUrl && (
-                              <div 
-                                onClick={() => setPreviewImage(item.imageUrl!)}
-                                className="relative w-8 h-8 rounded-lg overflow-hidden border border-purple-300 cursor-pointer hover:opacity-80 group shadow-sm flex-shrink-0 bg-gray-100"
-                                title="클릭하여 원본 크게 보기"
-                              >
-                                <img src={item.imageUrl} alt="항목 이미지" className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 flex items-center justify-center transition">
-                                  <Maximize2 className="w-2.5 h-2.5 text-white" />
-                                </div>
-                              </div>
-                            )}
-
-                            <button onClick={() => deleteItem(item.id)} className="text-gray-500 hover:text-red-600 p-1">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                          <button onClick={() => deleteItem(item.id)} className="text-gray-500 hover:text-red-600 p-1 flex-shrink-0">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       ))
                     ) : (
