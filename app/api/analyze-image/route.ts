@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let fileUrl = '';
 
-    // 1. 구글 드라이브 전용 업로드 (체크리스트, 추억, 배경, 프로필 사진 공통)
+    // 1. 구글 드라이브 업로드 (서비스 계정 Quota 0Byte 오류 해결)
     try {
       const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(buffer);
 
+        // parents 폴더를 지정하고 supportsAllDrives 활성화
         const response = await drive.files.create({
           requestBody: {
             name: `WTA_${Date.now()}_${file.name}`,
