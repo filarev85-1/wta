@@ -6,7 +6,8 @@ import {
   Plus, Trash2, Camera, X, RefreshCw, ChevronLeft, Calendar, Clock, Image as ImageIcon, ExternalLink, Maximize2, ListChecks, Edit3, Heart, ChevronRight as ChevronRightIcon, Sparkles, Save, Settings
 } from 'lucide-react';
 
-const APP_VERSION = 'v1.1.0';
+// 💡 지정 순차 버저닝: v1.1.1
+const APP_VERSION = 'v1.1.1';
 
 interface PlaceCard {
   id: string;
@@ -145,6 +146,9 @@ export default function WTAApp() {
   const [checklists, setChecklists] = useState<ChecklistItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('음식/식재료');
+  
+  // 💡 체크리스트 보기 전용 필터 (전체 포함)
+  const [filterCategory, setFilterCategory] = useState<string>('전체');
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -496,13 +500,13 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  // 💡 추억 탭 전용 사진 업로드 수신부 (URL 확실 매칭 보환)
+  // 💡 [추억 탭 디버그 패치] 기존 사진 배열 무결성 디버깅 및 연속 추가 예외 완벽 보완
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !selectedMemoryTripId) return;
 
     setIsAnalyzing(true);
-    setAnalyzingMessage('☁️ 드라이브 업로드 및 추억 사진 저장 중...');
+    setAnalyzingMessage('☁️ 이미지 전송 및 추억 사진 저장 중...');
 
     try {
       const newImagesList: string[] = [];
@@ -525,19 +529,21 @@ export default function WTAApp() {
       if (newImagesList.length > 0) {
         const updatedMemories = memoryTrips.map(t => {
           if (t.id === selectedMemoryTripId) {
-            const existingImgs = t.memoriesImages || [];
-            return { ...t, memoriesImages: [...existingImgs, ...newImagesList] };
+            // 안전한 배열 결합 (기존 memoriesImages 가 null/undefined 일 때 대비)
+            const currentImages = Array.isArray(t.memoriesImages) ? t.memoriesImages : [];
+            return { ...t, memoriesImages: [...currentImages, ...newImagesList] };
           }
           return t;
         });
 
         setMemoryTrips(updatedMemories);
         setHasUnsavedChanges(true);
-        alert(`📸 ${newImagesList.length}장의 추억 사진이 드라이브에 안전하게 보관되었습니다!`);
+        alert(`📸 ${newImagesList.length}장의 추억 사진이 성공적으로 추가되었습니다!`);
       } else {
-        alert('사진 업로드 실패: 드라이브 업로드 URL을 생성하지 못했습니다.');
+        alert('사진 업로드에 실패했습니다. 다시 시도해 주세요.');
       }
     } catch (err) {
+      console.error('추억 사진 추가 에러:', err);
       alert('사진 업로드 도중 에러가 발생했습니다.');
     } finally {
       setIsAnalyzing(false);
@@ -560,7 +566,7 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
-  // 💡 여정 상세카드 캡처 고정 유지 로직 (정상 확인 코드)
+  // 💡 여정 상세카드 캡처 고정 유지 로직
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
@@ -636,7 +642,11 @@ export default function WTAApp() {
   const selectedChecklistTrip = trips.find(t => t.id === selectedChecklistTripId);
   const selectedMemoryTrip = memoryTrips.find(t => t.id === selectedMemoryTripId);
 
-  const filteredChecklists = checklists.filter(item => item.tripId === selectedChecklistTripId || (!item.tripId && selectedChecklistTripId === trips[0]?.id));
+  // 💡 체크리스트 카테고리별 필터링 연산
+  const rawChecklists = checklists.filter(item => item.tripId === selectedChecklistTripId || (!item.tripId && selectedChecklistTripId === trips[0]?.id));
+  const filteredChecklists = filterCategory === '전체' 
+    ? rawChecklists 
+    : rawChecklists.filter(item => item.category === filterCategory);
 
   if (!isAuthenticated) {
     return (
@@ -1190,7 +1200,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 체크리스트 탭 */}
+          {/* 체크리스트 탭 (전체/카테고리별 필터 기능 탑재) */}
           {activeTab === 'checklist' && (
             <div className="flex flex-col gap-4">
               {selectedChecklistTripId ? (
@@ -1211,6 +1221,27 @@ export default function WTAApp() {
                     </div>
                   </div>
 
+                  {/* 💡 1. 카테고리 필터링 칩 태그 영역 (전체 포함) */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                    {['전체', '음식/식재료', '아이용품', '캠핑장비', '의류/세면', '중요사항', '기타'].map((cat) => {
+                      const isSelected = filterCategory === cat;
+                      return (
+                        <button
+                          key={cat}
+                          onClick={() => setFilterCategory(cat)}
+                          className={`text-xs px-2.5 py-1 rounded-xl font-bold transition flex-shrink-0 border ${
+                            isSelected
+                              ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300'
+                          }`}
+                        >
+                          {cat === '전체' ? '📋 전체' : cat}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* 준비물 입력 필드 */}
                   <div className="flex items-center gap-1.5 mt-1 w-full">
                     <select 
                       value={selectedCategory} 
@@ -1240,6 +1271,7 @@ export default function WTAApp() {
                     </button>
                   </div>
 
+                  {/* 필터링된 준비물 목록 표시 */}
                   <div className="flex flex-col gap-2 mt-2">
                     {filteredChecklists.length > 0 ? (
                       filteredChecklists.map((item) => (
@@ -1260,7 +1292,9 @@ export default function WTAApp() {
                       ))
                     ) : (
                       <div className="p-6 text-center text-xs text-gray-500 border-2 border-dashed rounded-2xl font-medium mt-1">
-                        등록된 짐 싸기 항목이 없습니다. 준비물을 추가해 보세요!
+                        {filterCategory === '전체' 
+                          ? '등록된 짐 싸기 항목이 없습니다. 준비물을 추가해 보세요!' 
+                          : `'${filterCategory}' 카테고리에 등록된 항목이 없습니다.`}
                       </div>
                     )}
                   </div>
@@ -1277,7 +1311,10 @@ export default function WTAApp() {
                       return (
                         <div 
                           key={trip.id}
-                          onClick={() => setSelectedChecklistTripId(trip.id)}
+                          onClick={() => {
+                            setSelectedChecklistTripId(trip.id);
+                            setFilterCategory('전체'); // 진입 시 기본 '전체' 보기
+                          }}
                           className="border-2 border-gray-200 rounded-2xl p-4 bg-white shadow-sm hover:border-purple-500 cursor-pointer transition flex justify-between items-center"
                         >
                           <div>
@@ -1301,7 +1338,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 추억 탭 (드라이브 전용 보완 완료) */}
+          {/* 추억 탭 */}
           {activeTab === 'past' && (
             <div className="flex flex-col gap-4">
               {selectedMemoryTripId && selectedMemoryTrip ? (
