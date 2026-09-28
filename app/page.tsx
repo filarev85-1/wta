@@ -6,12 +6,13 @@ import {
   Plus, Trash2, Camera, X, RefreshCw, ChevronLeft, Calendar, Clock, Image as ImageIcon, ExternalLink, Maximize2, ListChecks, Edit3, Heart, ChevronRight as ChevronRightIcon, Sparkles, Save, Settings
 } from 'lucide-react';
 
-// 💡 지정 순차 버저닝: v1.1.1
-const APP_VERSION = 'v1.1.1';
+// 💡 순차 버저닝: v1.1.2 (일자 구분 및 추억 슬라이딩 개선)
+const APP_VERSION = 'v1.1.2';
 
 interface PlaceCard {
   id: string;
   order: number;
+  day?: number; // 💡 1일차~10일차 구분 필드
   ampm: string;
   hour: string;
   minute: string;
@@ -146,8 +147,6 @@ export default function WTAApp() {
   const [checklists, setChecklists] = useState<ChecklistItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('음식/식재료');
-  
-  // 💡 체크리스트 보기 전용 필터 (전체 포함)
   const [filterCategory, setFilterCategory] = useState<string>('전체');
 
   const [isSyncing, setIsSyncing] = useState(false);
@@ -157,6 +156,9 @@ export default function WTAApp() {
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
   const [memoryImgIdx, setMemoryImgIdx] = useState<number>(0);
+  const touchStartX = useRef<number | null>(null); // 💡 슬라이딩 스와이프 제스처 핸들링
+  const touchEndX = useRef<number | null>(null);
+
   const fileInputRefPlaceCard = useRef<HTMLInputElement>(null);
   const fileInputRefMemory = useRef<HTMLInputElement>(null);
   const fileInputRefWife = useRef<HTMLInputElement>(null);
@@ -300,7 +302,7 @@ export default function WTAApp() {
       endDate: newEndDate,
       type: newTripType,
       places: [
-        { id: `p-${Date.now()}`, order: 1, ampm: '오전', hour: '07', minute: '00', name: '', address: '', tip: '상호명 또는 주소를 입력해 보세요.' }
+        { id: `p-${Date.now()}`, order: 1, day: 1, ampm: '오전', hour: '07', minute: '00', name: '', address: '', tip: '상호명 또는 주소를 입력해 보세요.' }
       ]
     };
 
@@ -359,12 +361,14 @@ export default function WTAApp() {
     const currentTrip = trips.find(t => t.id === selectedTripId);
     const places = currentTrip?.places || [];
     
+    let nextDay = 1;
     let nextAmpm = '오전';
     let nextHour = '07';
     let nextMinute = '00';
 
     if (places.length > 0) {
       const lastPlace = places[places.length - 1];
+      nextDay = lastPlace.day || 1;
       const lastAmpm = lastPlace.ampm || '오전';
       let lastHourNum = parseInt(lastPlace.hour || '10', 10);
       nextMinute = lastPlace.minute || '00';
@@ -392,6 +396,7 @@ export default function WTAApp() {
         const newCard: PlaceCard = {
           id: `p-${Date.now()}`,
           order: nextOrder,
+          day: nextDay,
           ampm: nextAmpm,
           hour: nextHour,
           minute: nextMinute,
@@ -480,6 +485,10 @@ export default function WTAApp() {
 
   const generateSmartMemoryReview = (trip: Trip) => {
     const sortedPlaces = [...(trip.places || [])].sort((a, b) => {
+      const dayA = a.day || 1;
+      const dayB = b.day || 1;
+      if (dayA !== dayB) return dayA - dayB;
+
       const timeA = (a.ampm === '오후' && a.hour !== '12' ? parseInt(a.hour) + 12 : (a.ampm === '오전' && a.hour === '12' ? 0 : parseInt(a.hour))) * 60 + parseInt(a.minute || '0');
       const timeB = (b.ampm === '오후' && b.hour !== '12' ? parseInt(b.hour) + 12 : (b.ampm === '오전' && b.hour === '12' ? 0 : parseInt(b.hour))) * 60 + parseInt(b.minute || '0');
       return timeA - timeB;
@@ -500,7 +509,6 @@ export default function WTAApp() {
     return `${trip.title}에서 소중한 사람들과 함께한 행복한 순간! ${placeRouteText}${extraChecklistText} 다음 여행도 기대되는 순간이었습니다.`;
   };
 
-  // 💡 [추억 탭 디버그 패치] 기존 사진 배열 무결성 디버깅 및 연속 추가 예외 완벽 보완
   const handleAddMemoryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !selectedMemoryTripId) return;
@@ -529,7 +537,6 @@ export default function WTAApp() {
       if (newImagesList.length > 0) {
         const updatedMemories = memoryTrips.map(t => {
           if (t.id === selectedMemoryTripId) {
-            // 안전한 배열 결합 (기존 memoriesImages 가 null/undefined 일 때 대비)
             const currentImages = Array.isArray(t.memoriesImages) ? t.memoriesImages : [];
             return { ...t, memoriesImages: [...currentImages, ...newImagesList] };
           }
@@ -566,7 +573,6 @@ export default function WTAApp() {
     setHasUnsavedChanges(true);
   };
 
-  // 💡 여정 상세카드 캡처 고정 유지 로직
   const handleAnalyzeCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetCardId) return;
@@ -608,6 +614,35 @@ export default function WTAApp() {
     }
   };
 
+  // 💡 추억 탭 터치/드래그 제스처 슬라이드 핸들러
+  const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    touchStartX.current = clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
+    if (touchStartX.current === null) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    touchEndX.current = clientX;
+  };
+
+  const handleTouchEnd = (totalCount: number) => {
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    const distance = touchStartX.current - touchEndX.current;
+
+    // 50px 이상 쓸어넘겼을 때 슬라이딩 넘김 인정
+    if (distance > 50) {
+      // 오른쪽 ➔ 왼쪽 (다음 사진)
+      setMemoryImgIdx(prev => (prev + 1) % totalCount);
+    } else if (distance < -50) {
+      // 왼쪽 ➔ 오른쪽 (이전 사진)
+      setMemoryImgIdx(prev => (prev - 1 + totalCount) % totalCount);
+    }
+
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
   const prevMonth = () => {
     setCurrentCalDate(new Date(currentCalDate.getFullYear(), currentCalDate.getMonth() - 1, 1));
     setSelectedCalTrip(null);
@@ -642,7 +677,6 @@ export default function WTAApp() {
   const selectedChecklistTrip = trips.find(t => t.id === selectedChecklistTripId);
   const selectedMemoryTrip = memoryTrips.find(t => t.id === selectedMemoryTripId);
 
-  // 💡 체크리스트 카테고리별 필터링 연산
   const rawChecklists = checklists.filter(item => item.tripId === selectedChecklistTripId || (!item.tripId && selectedChecklistTripId === trips[0]?.id));
   const filteredChecklists = filterCategory === '전체' 
     ? rawChecklists 
@@ -953,7 +987,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 여정 탭 */}
+          {/* 여정 탭 (💡 1. 1일차~10일차 선택 드롭다운 기능 추가) */}
           {activeTab === 'itinerary' && (
             <div className="flex flex-col gap-4">
               {selectedTripId && selectedTrip ? (
@@ -1026,13 +1060,24 @@ export default function WTAApp() {
                         return (
                           <div key={place.id} className="p-3.5 border-2 border-gray-200 rounded-2xl bg-white shadow-sm flex flex-col gap-2 relative">
                             <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="w-5 h-5 bg-blue-600 text-white text-xs font-extrabold rounded-full flex items-center justify-center shadow-sm">
                                   {place.order}
                                 </span>
                                 
                                 <div className="flex items-center gap-1 bg-gray-50 border border-gray-300 rounded-lg px-2 py-1">
-                                  <Clock className="w-3.5 h-3.5 text-blue-600" />
+                                  {/* 💡 1. 1일차 ~ 10일차 선택 추가 */}
+                                  <select 
+                                    value={place.day || 1} 
+                                    onChange={(e) => handlePlaceCardChange(place.id, 'day', parseInt(e.target.value, 10))}
+                                    className="text-xs font-extrabold text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 focus:outline-none cursor-pointer"
+                                  >
+                                    {Array.from({ length: 10 }, (_, i) => i + 1).map((d) => (
+                                      <option key={d} value={d}>{d}일차</option>
+                                    ))}
+                                  </select>
+
+                                  <Clock className="w-3.5 h-3.5 text-blue-600 ml-0.5" />
                                   <select 
                                     value={place.ampm || '오전'} 
                                     onChange={(e) => handlePlaceCardChange(place.id, 'ampm', e.target.value)}
@@ -1200,7 +1245,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 체크리스트 탭 (전체/카테고리별 필터 기능 탑재) */}
+          {/* 체크리스트 탭 */}
           {activeTab === 'checklist' && (
             <div className="flex flex-col gap-4">
               {selectedChecklistTripId ? (
@@ -1221,7 +1266,6 @@ export default function WTAApp() {
                     </div>
                   </div>
 
-                  {/* 💡 1. 카테고리 필터링 칩 태그 영역 (전체 포함) */}
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                     {['전체', '음식/식재료', '아이용품', '캠핑장비', '의류/세면', '중요사항', '기타'].map((cat) => {
                       const isSelected = filterCategory === cat;
@@ -1241,7 +1285,6 @@ export default function WTAApp() {
                     })}
                   </div>
 
-                  {/* 준비물 입력 필드 */}
                   <div className="flex items-center gap-1.5 mt-1 w-full">
                     <select 
                       value={selectedCategory} 
@@ -1271,7 +1314,6 @@ export default function WTAApp() {
                     </button>
                   </div>
 
-                  {/* 필터링된 준비물 목록 표시 */}
                   <div className="flex flex-col gap-2 mt-2">
                     {filteredChecklists.length > 0 ? (
                       filteredChecklists.map((item) => (
@@ -1313,7 +1355,7 @@ export default function WTAApp() {
                           key={trip.id}
                           onClick={() => {
                             setSelectedChecklistTripId(trip.id);
-                            setFilterCategory('전체'); // 진입 시 기본 '전체' 보기
+                            setFilterCategory('전체');
                           }}
                           className="border-2 border-gray-200 rounded-2xl p-4 bg-white shadow-sm hover:border-purple-500 cursor-pointer transition flex justify-between items-center"
                         >
@@ -1338,7 +1380,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 추억 탭 */}
+          {/* 추억 탭 (💡 2. 터치 제스처 스와이프 슬라이딩 및 시원한 대형 화살표 버튼 적용) */}
           {activeTab === 'past' && (
             <div className="flex flex-col gap-4">
               {selectedMemoryTripId && selectedMemoryTrip ? (
@@ -1371,33 +1413,65 @@ export default function WTAApp() {
 
                     <h2 className="font-bold text-base text-black">{selectedMemoryTrip.title}</h2>
 
-                    <div className="relative w-full h-48 bg-gray-100 rounded-2xl overflow-hidden border border-gray-200 flex items-center justify-center group">
+                    {/* 💡 터치/마우스 슬라이드 스와이프 감지 영역 */}
+                    <div 
+                      className="relative w-full h-56 bg-gray-100 rounded-2xl overflow-hidden border border-gray-200 flex items-center justify-center group select-none touch-pan-y cursor-grab active:cursor-grabbing"
+                      onTouchStart={handleTouchStart}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={() => handleTouchEnd(selectedMemoryTrip.memoriesImages?.length || 0)}
+                      onMouseDown={handleTouchStart}
+                      onMouseMove={handleTouchMove}
+                      onMouseUp={() => handleTouchEnd(selectedMemoryTrip.memoriesImages?.length || 0)}
+                    >
                       {selectedMemoryTrip.memoriesImages && selectedMemoryTrip.memoriesImages.length > 0 ? (
                         <>
                           <img 
                             src={selectedMemoryTrip.memoriesImages[memoryImgIdx % selectedMemoryTrip.memoriesImages.length]} 
                             alt="추억 사진" 
-                            className="w-full h-full object-cover cursor-pointer"
-                            onClick={() => setPreviewImage(selectedMemoryTrip.memoriesImages![memoryImgIdx % selectedMemoryTrip.memoriesImages.length])}
+                            className="w-full h-full object-cover pointer-events-none transition-all duration-300"
                           />
 
                           {selectedMemoryTrip.memoriesImages.length > 1 && (
                             <>
+                              {/* 💡 2. 시인성이 향상된 커진 좌우 화살표 버튼 */}
                               <button 
-                                onClick={() => setMemoryImgIdx(prev => (prev - 1 + selectedMemoryTrip.memoriesImages!.length) % selectedMemoryTrip.memoriesImages!.length)}
-                                className="absolute left-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMemoryImgIdx(prev => (prev - 1 + selectedMemoryTrip.memoriesImages!.length) % selectedMemoryTrip.memoriesImages!.length);
+                                }}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-full shadow-lg transition transform hover:scale-110 active:scale-95 z-10"
+                                title="이전 사진"
                               >
-                                <ChevronLeft className="w-4 h-4" />
+                                <ChevronLeft className="w-6 h-6 stroke-[3]" />
                               </button>
+
                               <button 
-                                onClick={() => setMemoryImgIdx(prev => (prev + 1) % selectedMemoryTrip.memoriesImages!.length)}
-                                className="absolute right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMemoryImgIdx(prev => (prev + 1) % selectedMemoryTrip.memoriesImages!.length);
+                                }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-full shadow-lg transition transform hover:scale-110 active:scale-95 z-10"
+                                title="다음 사진"
                               >
-                                <ChevronRightIcon className="w-4 h-4" />
+                                <ChevronRightIcon className="w-6 h-6 stroke-[3]" />
                               </button>
-                              <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+
+                              <span className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-2.5 py-1 rounded-full font-extrabold shadow backdrop-blur-sm z-10">
                                 {memoryImgIdx + 1} / {selectedMemoryTrip.memoriesImages.length}
                               </span>
+
+                              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10">
+                                {selectedMemoryTrip.memoriesImages.map((_, idx) => (
+                                  <span 
+                                    key={idx} 
+                                    className={`h-2 rounded-full transition-all ${
+                                      idx === (memoryImgIdx % selectedMemoryTrip.memoriesImages!.length) 
+                                        ? 'w-5 bg-white' 
+                                        : 'w-2 bg-white/50'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
                             </>
                           )}
                         </>
@@ -1410,9 +1484,9 @@ export default function WTAApp() {
 
                     <button 
                       onClick={() => fileInputRefMemory.current?.click()}
-                      className="w-full py-2 bg-pink-50 hover:bg-pink-100 border border-pink-300 text-pink-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-sm transition"
+                      className="w-full py-2.5 bg-pink-50 hover:bg-pink-100 border border-pink-300 text-pink-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-sm transition"
                     >
-                      <Camera className="w-3.5 h-3.5" /> 📸 추억 사진 추가하기 (여러 장 가능)
+                      <Camera className="w-4 h-4" /> 📸 추억 사진 추가하기 (여러 장 가능)
                     </button>
 
                     <div className="flex flex-col gap-1.5 mt-1">
