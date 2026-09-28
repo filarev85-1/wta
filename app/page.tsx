@@ -6,13 +6,13 @@ import {
   Plus, Trash2, Camera, X, RefreshCw, ChevronLeft, Calendar, Clock, Image as ImageIcon, ExternalLink, Maximize2, ListChecks, Edit3, Heart, ChevronRight as ChevronRightIcon, Sparkles, Save, Settings
 } from 'lucide-react';
 
-// 💡 순차 버저닝: v1.1.2 (일자 구분 및 추억 슬라이딩 개선)
-const APP_VERSION = 'v1.1.2';
+// 💡 순차 버저닝: v1.1.3 (추억 사진 로딩 스피너 및 확대 모달 복원)
+const APP_VERSION = 'v1.1.3';
 
 interface PlaceCard {
   id: string;
   order: number;
-  day?: number; // 💡 1일차~10일차 구분 필드
+  day?: number;
   ampm: string;
   hour: string;
   minute: string;
@@ -155,8 +155,10 @@ export default function WTAApp() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
+  // 💡 추억 탭 사진 로딩 상태 및 슬라이드 감지
   const [memoryImgIdx, setMemoryImgIdx] = useState<number>(0);
-  const touchStartX = useRef<number | null>(null); // 💡 슬라이딩 스와이프 제스처 핸들링
+  const [isImgLoading, setIsImgLoading] = useState<boolean>(true);
+  const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
   const fileInputRefPlaceCard = useRef<HTMLInputElement>(null);
@@ -614,7 +616,13 @@ export default function WTAApp() {
     }
   };
 
-  // 💡 추억 탭 터치/드래그 제스처 슬라이드 핸들러
+  // 💡 인덱스 변경 시 스피너 상태 초기화
+  const changeMemoryIdx = (newIdx: number, totalCount: number) => {
+    if (totalCount <= 0) return;
+    setIsImgLoading(true);
+    setMemoryImgIdx((newIdx + totalCount) % totalCount);
+  };
+
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     touchStartX.current = clientX;
@@ -630,13 +638,10 @@ export default function WTAApp() {
     if (touchStartX.current === null || touchEndX.current === null) return;
     const distance = touchStartX.current - touchEndX.current;
 
-    // 50px 이상 쓸어넘겼을 때 슬라이딩 넘김 인정
     if (distance > 50) {
-      // 오른쪽 ➔ 왼쪽 (다음 사진)
-      setMemoryImgIdx(prev => (prev + 1) % totalCount);
+      changeMemoryIdx(memoryImgIdx + 1, totalCount);
     } else if (distance < -50) {
-      // 왼쪽 ➔ 오른쪽 (이전 사진)
-      setMemoryImgIdx(prev => (prev - 1 + totalCount) % totalCount);
+      changeMemoryIdx(memoryImgIdx - 1, totalCount);
     }
 
     touchStartX.current = null;
@@ -987,7 +992,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 여정 탭 (💡 1. 1일차~10일차 선택 드롭다운 기능 추가) */}
+          {/* 여정 탭 */}
           {activeTab === 'itinerary' && (
             <div className="flex flex-col gap-4">
               {selectedTripId && selectedTrip ? (
@@ -1066,7 +1071,6 @@ export default function WTAApp() {
                                 </span>
                                 
                                 <div className="flex items-center gap-1 bg-gray-50 border border-gray-300 rounded-lg px-2 py-1">
-                                  {/* 💡 1. 1일차 ~ 10일차 선택 추가 */}
                                   <select 
                                     value={place.day || 1} 
                                     onChange={(e) => handlePlaceCardChange(place.id, 'day', parseInt(e.target.value, 10))}
@@ -1380,7 +1384,7 @@ export default function WTAApp() {
             </div>
           )}
 
-          {/* 추억 탭 (💡 2. 터치 제스처 스와이프 슬라이딩 및 시원한 대형 화살표 버튼 적용) */}
+          {/* 추억 탭 (💡 1. 사진 변경 시 스피너 로딩 추가 & 2. 사진 클릭 시 확대 모달 복원) */}
           {activeTab === 'past' && (
             <div className="flex flex-col gap-4">
               {selectedMemoryTripId && selectedMemoryTrip ? (
@@ -1413,9 +1417,9 @@ export default function WTAApp() {
 
                     <h2 className="font-bold text-base text-black">{selectedMemoryTrip.title}</h2>
 
-                    {/* 💡 터치/마우스 슬라이드 스와이프 감지 영역 */}
+                    {/* 터치/마우스 슬라이드 스와이프 감지 영역 */}
                     <div 
-                      className="relative w-full h-56 bg-gray-100 rounded-2xl overflow-hidden border border-gray-200 flex items-center justify-center group select-none touch-pan-y cursor-grab active:cursor-grabbing"
+                      className="relative w-full h-56 bg-gray-100 rounded-2xl overflow-hidden border border-gray-200 flex items-center justify-center group select-none touch-pan-y cursor-pointer"
                       onTouchStart={handleTouchStart}
                       onTouchMove={handleTouchMove}
                       onTouchEnd={() => handleTouchEnd(selectedMemoryTrip.memoriesImages?.length || 0)}
@@ -1425,21 +1429,33 @@ export default function WTAApp() {
                     >
                       {selectedMemoryTrip.memoriesImages && selectedMemoryTrip.memoriesImages.length > 0 ? (
                         <>
+                          {/* 💡 1. 로딩 스피너 및 메시지 표시 */}
+                          {isImgLoading && (
+                            <div className="absolute inset-0 bg-gray-100/90 flex flex-col items-center justify-center gap-2 z-20 transition-opacity">
+                              <RefreshCw className="w-6 h-6 text-pink-600 animate-spin" />
+                              <span className="text-xs text-gray-600 font-bold">사진 로딩 중...</span>
+                            </div>
+                          )}
+
+                          {/* 💡 2. 클릭 시 원본 사진 확대 모달 트리거 */}
                           <img 
+                            key={selectedMemoryTrip.memoriesImages[memoryImgIdx % selectedMemoryTrip.memoriesImages.length]}
                             src={selectedMemoryTrip.memoriesImages[memoryImgIdx % selectedMemoryTrip.memoriesImages.length]} 
                             alt="추억 사진" 
-                            className="w-full h-full object-cover pointer-events-none transition-all duration-300"
+                            onLoad={() => setIsImgLoading(false)}
+                            onClick={() => setPreviewImage(selectedMemoryTrip.memoriesImages![memoryImgIdx % selectedMemoryTrip.memoriesImages.length])}
+                            className={`w-full h-full object-cover transition-opacity duration-300 ${isImgLoading ? 'opacity-0' : 'opacity-100'}`}
                           />
 
                           {selectedMemoryTrip.memoriesImages.length > 1 && (
                             <>
-                              {/* 💡 2. 시인성이 향상된 커진 좌우 화살표 버튼 */}
+                              {/* 좌우 화살표 버튼 */}
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setMemoryImgIdx(prev => (prev - 1 + selectedMemoryTrip.memoriesImages!.length) % selectedMemoryTrip.memoriesImages!.length);
+                                  changeMemoryIdx(memoryImgIdx - 1, selectedMemoryTrip.memoriesImages!.length);
                                 }}
-                                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-full shadow-lg transition transform hover:scale-110 active:scale-95 z-10"
+                                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-full shadow-lg transition transform hover:scale-110 active:scale-95 z-30"
                                 title="이전 사진"
                               >
                                 <ChevronLeft className="w-6 h-6 stroke-[3]" />
@@ -1448,19 +1464,19 @@ export default function WTAApp() {
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setMemoryImgIdx(prev => (prev + 1) % selectedMemoryTrip.memoriesImages!.length);
+                                  changeMemoryIdx(memoryImgIdx + 1, selectedMemoryTrip.memoriesImages!.length);
                                 }}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-full shadow-lg transition transform hover:scale-110 active:scale-95 z-10"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-full shadow-lg transition transform hover:scale-110 active:scale-95 z-30"
                                 title="다음 사진"
                               >
                                 <ChevronRightIcon className="w-6 h-6 stroke-[3]" />
                               </button>
 
-                              <span className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-2.5 py-1 rounded-full font-extrabold shadow backdrop-blur-sm z-10">
+                              <span className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-2.5 py-1 rounded-full font-extrabold shadow backdrop-blur-sm z-30">
                                 {memoryImgIdx + 1} / {selectedMemoryTrip.memoriesImages.length}
                               </span>
 
-                              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10">
+                              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-30">
                                 {selectedMemoryTrip.memoriesImages.map((_, idx) => (
                                   <span 
                                     key={idx} 
@@ -1529,6 +1545,7 @@ export default function WTAApp() {
                           onClick={() => {
                             setSelectedMemoryTripId(trip.id);
                             setMemoryImgIdx(0);
+                            setIsImgLoading(true);
                           }}
                           className="border-2 border-gray-200 rounded-2xl p-4 bg-white shadow-sm hover:border-pink-500 cursor-pointer transition flex justify-between items-center group"
                         >
